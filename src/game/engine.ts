@@ -974,16 +974,36 @@ export class GameEngine {
    * tower topples.
    */
   private checkForFallenBlocks() {
+    const platform = this.world.platform;
+    const platformWidth =
+      (platform as Matter.Body & { _platformWidth?: number })._platformWidth ?? 220;
+    const platformLeft = platform.position.x - platformWidth / 2;
+    const platformRight = platform.position.x + platformWidth / 2;
     // Platform half-height is 13 px. Any block whose center has dropped past
     // the platform's bottom face has clearly slipped off and shouldn't linger
     // wedged against the platform's underside or the wall corner.
     const fallThreshold = this.platformBaseY + 14;
+    // A block whose center has slipped off the side of the platform and is
+    // no longer stacked on top of anything (i.e., it's at or below platform
+    // level rather than part of the rising tower) has no real support. Left
+    // alone, such blocks get wedged in the corner between the platform's
+    // side and the canvas edge wall, where they accumulate and block new
+    // drops. Treat them as fallen as soon as they end up there.
+    const sideFallThreshold = this.platformBaseY - 30;
     let collapsedThisTick = 0;
     for (let i = this.placedBlocks.length - 1; i >= 0; i--) {
       const body = this.placedBlocks[i];
       const meta = (body as Matter.Body & { _meta?: BodyMeta })._meta;
       if (!meta || meta.shattered) continue;
-      if (body.position.y > fallThreshold) {
+      if (body.isStatic) continue;
+
+      const fellBelow = body.position.y > fallThreshold;
+      const centerOffSide =
+        body.position.x < platformLeft - 2 || body.position.x > platformRight + 2;
+      const atPlatformLevel = body.position.y > sideFallThreshold;
+      const slippedOffSide = centerOffSide && atPlatformLevel;
+
+      if (fellBelow || slippedOffSide) {
         meta.shattered = true;
         collapsedThisTick++;
         this.blocksCollapsedCount++;
