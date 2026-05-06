@@ -1,0 +1,67 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+  --safe-top: env(safe-area-inset-top, 0);
+  --safe-bottom: env(safe-area-inset-bottom, 0);
+  --bg: #0e0e10;
+  --surface: #17171a;
+  --surface-2: #22222a;
+  --accent: #ffd60a;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  font-family: 'Fredoka', system-ui, sans-serif;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  overscroll-behavior: none;
+}
+
+/* Use the dynamic viewport on browsers that support it so the layout
+   tracks the visible area as iOS Safari's URL bar shows/hides. */
+@supports (height: 100dvh) {
+  html, body, #root {
+    height: 100dvh;
+  }
+}
+
+body {
+  background: var(--bg);
+}
+
+button {
+  font-family: inherit;
+}
+
+@layer components {
+  .btn {
+    @apply relative inline-flex items-center justify-center gap-2 px-6 py-3 rounded-2xl font-semibold tracking-wide
+           transition-transform duration-150 active:scale-95 select-none cursor-pointer
+           shadow-[0_6px_0_rgba(0,0,0,0.45)];
+  }
+  .btn-primary {
+    @apply btn text-black text-lg bg-accent hover:brightness-110;
+  }
+  .btn-ghost {
+    @apply btn text-white bg-surface hover:bg-surface-2 border border-white/10;
+  }
+  .panel {
+    @apply rounded-3xl bg-surface border border-white/10 shadow-[0_10px_24px_rgba(0,0,0,0.45)];
+  }
+  .accent-text {
+    color: var(--accent);
+    text-shadow:
+      0 0 6px rgba(255, 214, 10, 0.45),
+      0 0 18px rgba(255, 214, 10, 0.25);
+  }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .scrollbar-hide { scrollbar-width: none; }
+}
+
+/* Remove iOS double-tap zoom on game canvas */
+canvas { touch-action: none; }
