@@ -75,9 +75,17 @@ const BlockTray = forwardRef<HTMLDivElement, Props>(function BlockTray(
               >
                 {spec && (
                   <button
-                    className="w-full h-full flex items-center justify-center cursor-grab active:cursor-grabbing"
+                    type="button"
+                    className="w-full h-full flex items-center justify-center cursor-grab active:cursor-grabbing touch-none select-none"
+                    style={{ touchAction: 'none' }}
                     onPointerDown={(e) => {
                       e.preventDefault();
+                      const el = e.currentTarget;
+                      try {
+                        el.setPointerCapture(e.pointerId);
+                      } catch {
+                        // Older browsers without pointer capture — events still fire on window.
+                      }
                       setDragging(spec.id);
                       onDragStart(spec, e.clientX, e.clientY);
                     }}
