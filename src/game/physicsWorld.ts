@@ -23,7 +23,6 @@ export interface WorldHandles {
   world: Matter.World;
   ground: Matter.Body;
   platform: Matter.Body;
-  walls: Matter.Body[];
 }
 
 export const PHYSICS = {
@@ -41,7 +40,12 @@ export function createWorld(width: number, height: number): WorldHandles {
   });
   const world = engine.world;
 
-  const ground = Matter.Bodies.rectangle(width / 2, height + 200, width * 4, 400, {
+  // Wide ground catcher — sits well below the visible canvas and extends
+  // far past the canvas edges so that blocks which slide off the side of
+  // the platform fall into the void and are eventually swept by the
+  // engine's fallen-block check rather than getting wedged against side
+  // walls. There are intentionally NO side walls.
+  const ground = Matter.Bodies.rectangle(width / 2, height + 200, width * 8, 400, {
     isStatic: true,
     label: 'ground',
     friction: 1,
@@ -55,20 +59,9 @@ export function createWorld(width: number, height: number): WorldHandles {
     restitution: 0.0,
   });
 
-  const wallL = Matter.Bodies.rectangle(-200, height / 2, 400, height * 4, {
-    isStatic: true,
-    label: 'wall',
-    render: { visible: false },
-  });
-  const wallR = Matter.Bodies.rectangle(width + 200, height / 2, 400, height * 4, {
-    isStatic: true,
-    label: 'wall',
-    render: { visible: false },
-  });
+  Matter.Composite.add(world, [ground, platform]);
 
-  Matter.Composite.add(world, [ground, platform, wallL, wallR]);
-
-  return { engine, world, ground, platform, walls: [wallL, wallR] };
+  return { engine, world, ground, platform };
 }
 
 export function disposeWorld(handles: WorldHandles) {

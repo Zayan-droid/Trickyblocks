@@ -344,7 +344,7 @@ export class GameEngine {
   }
 
   /**
-   * Re-anchor the platform and side walls to the current canvas size and the
+   * Re-anchor the platform and ground to the current canvas size and the
    * current bottomReserved offset. Existing placed blocks shift by the same
    * vertical delta so the player's tower stays visually in place relative to
    * the platform across orientation changes / URL-bar collapse.
@@ -376,10 +376,6 @@ export class GameEngine {
       this.platformBaseY = newBaseY;
     }
 
-    if (this.world.walls.length === 2) {
-      Matter.Body.setPosition(this.world.walls[0], { x: -200, y: height / 2 });
-      Matter.Body.setPosition(this.world.walls[1], { x: width + 200, y: height / 2 });
-    }
     if (this.world.ground) {
       Matter.Body.setPosition(this.world.ground, { x: width / 2, y: height + 200 });
     }
@@ -967,11 +963,11 @@ export class GameEngine {
   }
 
   /**
-   * Detect blocks that have fallen off the platform but haven't reached the
-   * ground body (e.g., resting against a wall or piled below). Once a block
-   * sits well below the platform with little vertical motion, count it as a
-   * collapse and remove it. This is what triggers the lose condition when the
-   * tower topples.
+   * Detect blocks that have fallen off the platform. With no side walls,
+   * a block that slips off either side falls into the void and gets
+   * cleaned up here once its center crosses the fall threshold. The
+   * side-slip check covers the edge case of a block balanced on the
+   * platform's corner with its center already past the edge.
    */
   private checkForFallenBlocks() {
     const platform = this.world.platform;
