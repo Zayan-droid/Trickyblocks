@@ -1,6 +1,7 @@
 import Matter from 'matter-js';
 import type { BlockSpec, PlatformType } from './types';
 import { geomFor, tracePath } from './shapes';
+import { getAccentColor, getAccentRgba } from './themes';
 
 export interface RendererOpts {
   ctx: CanvasRenderingContext2D;
@@ -17,9 +18,14 @@ export function clear(ctx: CanvasRenderingContext2D, w: number, h: number) {
 
 export function drawBackdrop(opts: RendererOpts) {
   const { ctx, width, height, cameraY } = opts;
-  ctx.fillStyle = '#0e0e10';
+  const bgVar =
+    typeof window !== 'undefined'
+      ? getComputedStyle(document.documentElement).getPropertyValue('--bg').trim()
+      : '';
+  ctx.fillStyle = bgVar ? `rgb(${bgVar})` : '#0e0e10';
   ctx.fillRect(0, 0, width, height);
 
+  const accent = getAccentColor();
   ctx.globalAlpha = 0.55;
   for (let i = 0; i < 60; i++) {
     const seed = i * 9301 + 49297;
@@ -27,7 +33,7 @@ export function drawBackdrop(opts: RendererOpts) {
     const sy = (((seed * 977 + 113) % 1000) / 1000) * height * 1.4 - cameraY * 0.15;
     const yy = ((sy % (height * 1.4)) + height * 1.4) % (height * 1.4);
     if (yy < height) {
-      ctx.fillStyle = i % 5 === 0 ? '#ffd60a' : '#3a3a44';
+      ctx.fillStyle = i % 5 === 0 ? accent : '#3a3a44';
       ctx.fillRect(sx, yy, 2, 2);
     }
   }
@@ -285,7 +291,7 @@ export function drawHeightLine(
 ) {
   const y = baseY - cameraY - height;
   ctx.save();
-  ctx.strokeStyle = 'rgba(255, 214, 10, 0.5)';
+  ctx.strokeStyle = getAccentRgba(0.5);
   ctx.lineWidth = 2;
   ctx.setLineDash([10, 8]);
   ctx.beginPath();
@@ -293,7 +299,7 @@ export function drawHeightLine(
   ctx.lineTo(width, y);
   ctx.stroke();
   ctx.setLineDash([]);
-  ctx.fillStyle = '#ffd60a';
+  ctx.fillStyle = getAccentColor();
   ctx.font = '14px Fredoka';
   ctx.fillText(label, 12, y - 6);
   ctx.restore();

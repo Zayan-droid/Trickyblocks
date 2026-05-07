@@ -1,8 +1,10 @@
 import { useNavigate } from 'react-router-dom';
 import { useGameStore } from '@/store/gameStore';
 import { useProgressStore } from '@/store/progressStore';
+import { useSettingsStore } from '@/store/settingsStore';
 import { getDailyChallenge } from '@/game/daily';
 import { ensureAudio, playSfx } from '@/game/audio';
+import { THEMES, type ThemeId } from '@/game/themes';
 import LogoMark from '@/components/LogoMark';
 
 export default function MainMenu() {
@@ -11,6 +13,14 @@ export default function MainMenu() {
   const dailyHistory = useProgressStore((s) => s.dailyHistory);
   const challengesCompleted = useProgressStore((s) => s.challengesCompleted);
   const endless = useProgressStore((s) => s.endlessLevelReached);
+  const theme = useSettingsStore((s) => s.theme);
+  const setTheme = useSettingsStore((s) => s.setTheme);
+
+  const pickTheme = (id: ThemeId) => {
+    if (id === theme) return;
+    playSfx('click');
+    setTheme(id);
+  };
 
   const today = getDailyChallenge();
   const dailyDone = dailyHistory.find((d) => d.date === today.date)?.completed;
@@ -41,6 +51,38 @@ export default function MainMenu() {
         <div className="flex items-center gap-3">
           <LogoMark size={56} />
           <div className="text-3xl sm:text-4xl font-display accent-text">TRICKY BLOCKS</div>
+        </div>
+
+        <div className="w-full flex flex-col items-center gap-2">
+          <div className="text-[10px] uppercase tracking-[0.25em] text-white/60">
+            Color Scheme
+          </div>
+          <div className="flex items-center justify-center gap-3">
+            {THEMES.map((t) => {
+              const active = t.id === theme;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => pickTheme(t.id)}
+                  aria-label={`${t.name} theme`}
+                  aria-pressed={active}
+                  title={`${t.name} — ${t.vibe}`}
+                  className={`relative w-9 h-9 rounded-full transition-transform duration-150 active:scale-90 ${
+                    active
+                      ? 'ring-2 ring-white scale-110'
+                      : 'ring-1 ring-white/20 hover:ring-white/50'
+                  }`}
+                  style={{
+                    background: `linear-gradient(135deg, ${t.accent} 0 50%, ${t.bg} 50% 100%)`,
+                  }}
+                >
+                  {active && (
+                    <span className="absolute inset-0 rounded-full pointer-events-none animate-pulseGlow" />
+                  )}
+                </button>
+              );
+            })}
+          </div>
         </div>
 
         <button onClick={startEndless} className="btn-primary w-full text-2xl py-5">

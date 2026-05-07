@@ -1,3 +1,5 @@
+import { getAccentColor } from './themes';
+
 export interface Particle {
   x: number;
   y: number;
@@ -55,7 +57,8 @@ export class ParticleSystem {
   }
 
   emitConfetti(x: number, y: number, count = 60) {
-    const colors = ['#ffd60a', '#ffffff', '#ffd60a', '#ffd60a', '#ffffff', '#ffd60a'];
+    const a = getAccentColor();
+    const colors = [a, '#ffffff', a, a, '#ffffff', a];
     this.emit({
       x,
       y,
@@ -89,7 +92,7 @@ export class ParticleSystem {
       x,
       y,
       count,
-      colors: ['#ffffff', '#ffd60a'],
+      colors: ['#ffffff', getAccentColor()],
       speed: 4,
       spread: Math.PI,
       life: 320,

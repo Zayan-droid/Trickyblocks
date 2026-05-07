@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import Splash from './screens/Splash';
 import Welcome from './screens/Welcome';
@@ -7,8 +8,14 @@ import GameOver from './screens/GameOver';
 import ChallengeSelect from './screens/ChallengeSelect';
 import Settings from './screens/Settings';
 import HowToPlay from './screens/HowToPlay';
+import { useSettingsStore } from './store/settingsStore';
+import { applyTheme } from './game/themes';
 
 export default function App() {
+  const theme = useSettingsStore((s) => s.theme);
+  useEffect(() => {
+    applyTheme(theme);
+  }, [theme]);
   return (
     <Routes>
       <Route path="/" element={<Splash />} />

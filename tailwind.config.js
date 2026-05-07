@@ -8,10 +8,10 @@ export default {
         body: ['"Fredoka"', 'system-ui', 'sans-serif'],
       },
       colors: {
-        bg: '#0E0E10',
-        surface: '#17171a',
-        'surface-2': '#22222a',
-        accent: '#FFD60A',
+        bg: 'rgb(var(--bg) / <alpha-value>)',
+        surface: 'rgb(var(--surface) / <alpha-value>)',
+        'surface-2': 'rgb(var(--surface-2) / <alpha-value>)',
+        accent: 'rgb(var(--accent) / <alpha-value>)',
       },
       keyframes: {
         floaty: {
@@ -32,8 +32,8 @@ export default {
           '100%': { backgroundPosition: '200% 0' },
         },
         pulseGlow: {
-          '0%,100%': { boxShadow: '0 0 0 0 rgba(255,214,10,0.6)' },
-          '50%': { boxShadow: '0 0 24px 8px rgba(255,214,10,0.6)' },
+          '0%,100%': { boxShadow: '0 0 0 0 rgb(var(--accent) / 0.6)' },
+          '50%': { boxShadow: '0 0 24px 8px rgb(var(--accent) / 0.6)' },
         },
         rise: {
           '0%': { transform: 'translateY(20px)', opacity: '0' },

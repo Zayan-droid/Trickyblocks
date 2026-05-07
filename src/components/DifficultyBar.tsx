@@ -31,10 +31,15 @@ export default function DifficultyBar({ difficulty }: Props) {
 
 function Star({ filled }: { filled: boolean }) {
   return (
-    <svg viewBox="0 0 24 24" width="100%" height="100%">
+    <svg
+      viewBox="0 0 24 24"
+      width="100%"
+      height="100%"
+      className={filled ? 'text-accent' : ''}
+    >
       <path
         d="M12 2l2.9 6 6.6.9-4.8 4.6 1.2 6.6L12 17l-5.9 3.1 1.2-6.6L2.5 8.9 9.1 8z"
-        fill={filled ? '#FFD60A' : 'rgba(255,255,255,0.25)'}
+        fill={filled ? 'currentColor' : 'rgba(255,255,255,0.25)'}
       />
     </svg>
   );

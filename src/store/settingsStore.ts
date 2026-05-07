@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
+import { DEFAULT_THEME, type ThemeId } from '@/game/themes';
 
 interface SettingsState {
   musicVolume: number;
@@ -8,12 +9,14 @@ interface SettingsState {
   colorBlindMode: boolean;
   reduceMotion: boolean;
   physicsSensitivity: number; // 0.5 .. 1.5
+  theme: ThemeId;
   setMusicVolume: (v: number) => void;
   setSfxVolume: (v: number) => void;
   setHaptics: (v: boolean) => void;
   setColorBlind: (v: boolean) => void;
   setReduceMotion: (v: boolean) => void;
   setPhysicsSensitivity: (v: number) => void;
+  setTheme: (v: ThemeId) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -25,12 +28,14 @@ export const useSettingsStore = create<SettingsState>()(
       colorBlindMode: false,
       reduceMotion: false,
       physicsSensitivity: 1.0,
+      theme: DEFAULT_THEME,
       setMusicVolume: (v) => set({ musicVolume: v }),
       setSfxVolume: (v) => set({ sfxVolume: v }),
       setHaptics: (v) => set({ hapticsEnabled: v }),
       setColorBlind: (v) => set({ colorBlindMode: v }),
       setReduceMotion: (v) => set({ reduceMotion: v }),
       setPhysicsSensitivity: (v) => set({ physicsSensitivity: v }),
+      setTheme: (v) => set({ theme: v }),
     }),
     { name: 'tricky-blocks-settings' },
   ),
