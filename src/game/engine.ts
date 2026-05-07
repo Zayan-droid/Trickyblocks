@@ -28,6 +28,7 @@ import {
   vibrate,
 } from './audio';
 import { ParticleSystem } from './particles';
+import { getAccentColor } from './themes';
 import {
   clear,
   drawBackdrop,
@@ -766,7 +767,7 @@ export class GameEngine {
       8,
     );
 
-    setTimeout(() => this.scoreAfterSettle(body), 700);
+    setTimeout(() => this.scoreAfterSettle(body, 0), 700);
 
     if (this.trayBlocks.length === 0) {
       this.refillTray();
@@ -810,7 +811,8 @@ export class GameEngine {
     }
   }
 
-  private scoreAfterSettle(body: Matter.Body) {
+  private scoreAfterSettle(body: Matter.Body, attempt: number) {
+    // Block was removed (fell off / undone) — nothing to score.
     if (!this.placedBlocks.includes(body)) return;
     const meta = (body as Matter.Body & { _meta?: BodyMeta })._meta;
     if (!meta || meta.scored) return;
@@ -819,7 +821,25 @@ export class GameEngine {
 
     const sleeping = body.isSleeping;
     const speed = Math.hypot(body.velocity.x, body.velocity.y);
-    const stable = sleeping || speed < 0.4;
+    const angSpeed = Math.abs(body.angularVelocity);
+    const stable = sleeping || (speed < 0.4 && angSpeed < 0.05);
+
+    // Not yet settled — give physics more time before deciding. If after
+    // several retries it's still moving (i.e., wobbling toward the edge or
+    // tumbling), forfeit the score and break the combo. This prevents banking
+    // points for a block that is still in motion and will shortly fall off.
+    if (!stable) {
+      if (attempt < 5) {
+        setTimeout(() => this.scoreAfterSettle(body, attempt + 1), 400);
+        return;
+      }
+      meta.scored = true;
+      if (this.combo !== 0) {
+        this.combo = 0;
+        this.cfg.callbacks.onCombo(0);
+      }
+      return;
+    }
 
     const heightAboveBase = Math.max(0, this.platformBaseY - body.position.y);
     const platformX = this.world.platform.position.x;
@@ -829,12 +849,8 @@ export class GameEngine {
     const horizontalOffset = Math.abs(body.position.x - platformX);
     const centeredness = Math.max(0, 1 - horizontalOffset / (platformWidth / 2));
 
-    if (stable) {
-      this.combo += 1;
-      this.bestComboThisGame = Math.max(this.bestComboThisGame, this.combo);
-    } else {
-      this.combo = 0;
-    }
+    this.combo += 1;
+    this.bestComboThisGame = Math.max(this.bestComboThisGame, this.combo);
     this.cfg.callbacks.onCombo(this.combo);
 
     const { total, breakdown } = scorePlacement({
@@ -842,8 +858,8 @@ export class GameEngine {
       combo: this.combo,
       difficulty: this.difficulty,
       blockSpec: meta.spec,
-      stable,
-      perfectStack: stable && centeredness > 0.92 && this.combo >= 3,
+      stable: true,
+      perfectStack: centeredness > 0.92 && this.combo >= 3,
       centeredness,
     });
     meta.scored = true;
@@ -1129,7 +1145,7 @@ export class GameEngine {
         x: dir > 0 ? 0 : this.canvas.clientWidth,
         y: this.canvas.clientHeight / 2,
         count: 24,
-        colors: ['#ffffff', '#ffd60a'],
+        colors: ['#ffffff', getAccentColor()],
         speed: 8,
         spread: Math.PI / 6,
         life: 700,
