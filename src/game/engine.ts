@@ -930,10 +930,6 @@ export class GameEngine {
     if (next !== this.difficulty) {
       this.difficulty = next;
       this.cfg.callbacks.onDifficulty(next);
-      const eff = effectsFor(next);
-      if (!this.challenge) {
-        this.wind = eff.windSpeed * (Math.random() > 0.5 ? 1 : -1);
-      }
       this.applyDifficultyPhysics();
     }
   }
@@ -951,20 +947,20 @@ export class GameEngine {
   }
 
   /**
-   * At difficulty ≥ 3 apply periodic micro-impulses to the upper tower so it
-   * sways and requires more careful placement. The higher the difficulty the
-   * more frequent and stronger the disturbances.
+   * Challenge-only: at difficulty ≥ 3 apply periodic micro-impulses to the
+   * upper tower so it sways and requires more careful placement. Endless mode
+   * never gets disturbances — collapses there must come from the player's own
+   * placements, not surprise shoves.
    */
   private tickDisturbances(dt: number) {
+    if (!this.challenge) return;
     const d = this.difficulty;
     if (d < 3 || this.placedBlocks.length < 3) return;
     this.disturbanceTimer += dt;
-    // d=3 → every 2400 ms, d=5 → every 1200 ms
     const interval = 3600 - d * 600;
     if (this.disturbanceTimer < interval) return;
     this.disturbanceTimer = 0;
 
-    // Target the top third of the tower (most likely to tip)
     const sorted = [...this.placedBlocks].sort((a, b) => a.position.y - b.position.y);
     const topCount = Math.max(1, Math.ceil(sorted.length / 3));
     const target = sorted[Math.floor(Math.random() * topCount)];
