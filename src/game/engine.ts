@@ -38,7 +38,7 @@ import {
   drawLandingSilhouette,
   drawPlatform,
 } from './renderer';
-import { cellsFor } from './shapes';
+import { cellsFor, centroidOffsetFor } from './shapes';
 import type {
   BlockSpec,
   ChallengeSpec,
@@ -713,9 +713,14 @@ export class GameEngine {
     this.trayBlocks = this.trayBlocks.filter((b) => b.id !== spec.id);
     this.cfg.callbacks.onTray([...this.trayBlocks]);
 
+    // Matter sets compound body.position to the centroid (centre of mass), not
+    // the geometric centre. For asymmetric pieces (T, L, J) those differ — so
+    // shift the spawn position by the centroid offset so the geom centre lands
+    // exactly at the snap column / projected landing Y.
+    const off = centroidOffsetFor(spec.shape, spec.unit);
     const body = spawnBlock(this.world.world, {
-      x: snappedX,
-      y: landingY,
+      x: snappedX + off.x,
+      y: landingY + off.y,
       spec,
       angle: 0,
       isStatic: pinned,

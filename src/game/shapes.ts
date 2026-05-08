@@ -333,6 +333,35 @@ export function traceRoundedOutline(
   ctx.closePath();
 }
 
+/**
+ * Offset (in pixels) of the body's centroid from its geometric center, in
+ * local block coordinates. Matter.js sets compound body.position to the
+ * centroid, but our outlines and cell layouts are anchored at the geometric
+ * center. The renderer and the landing projector both need to compensate
+ * for asymmetric pieces (T, L, J) so visual = physics.
+ *
+ * Computed analytically from cellsFor (each cell has equal area):
+ *  - I, O, S, Z: symmetric → (0, 0)
+ *  - T:        cells [(-1,-0.5),(0,-0.5),(1,-0.5),(0,0.5)] → (0, -0.25u)
+ *  - L:        cells [(-0.5,-1),(-0.5,0),(-0.5,1),(0.5,1)] → (-0.25u, +0.25u)
+ *  - J:        mirror of L → (+0.25u, +0.25u)
+ */
+export function centroidOffsetFor(
+  shape: BlockShape,
+  unit: number,
+): { x: number; y: number } {
+  switch (shape) {
+    case 'T':
+      return { x: 0, y: -0.25 * unit };
+    case 'L':
+      return { x: -0.25 * unit, y: 0.25 * unit };
+    case 'J':
+      return { x: 0.25 * unit, y: 0.25 * unit };
+    default:
+      return { x: 0, y: 0 };
+  }
+}
+
 /** Build an SVG path string for a ShapeGeom (used by BlockPreview). */
 export function svgPath(geom: ShapeGeom): string {
   return geom.parts

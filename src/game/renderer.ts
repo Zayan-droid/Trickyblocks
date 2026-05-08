@@ -1,6 +1,12 @@
 import Matter from 'matter-js';
 import type { BlockSpec, PlatformType } from './types';
-import { geomFor, outlineFor, traceRoundedOutline, tracePath } from './shapes';
+import {
+  centroidOffsetFor,
+  geomFor,
+  outlineFor,
+  traceRoundedOutline,
+  tracePath,
+} from './shapes';
 import { getAccentColor, getAccentRgba, getShapeColor } from './themes';
 
 export interface RendererOpts {
@@ -155,10 +161,15 @@ export function drawBlock(
   const x = body.position.x;
   const y = body.position.y - cameraY;
 
+  // body.position is the centroid; the outline is anchored at the geometric
+  // center. Translate by (geomCenter - centroid) so visual aligns with physics.
+  const off = centroidOffsetFor(spec.shape, spec.unit);
+
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(body.angle);
   ctx.scale(sx, sy);
+  ctx.translate(-off.x, -off.y);
 
   drawPremiumSilhouette(ctx, spec, ghost, glow);
 
