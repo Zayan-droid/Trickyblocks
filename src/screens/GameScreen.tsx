@@ -18,7 +18,6 @@ export default function GameScreen() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const trayRef = useRef<HTMLDivElement>(null);
   const engineRef = useRef<GameEngine | null>(null);
-  const [trayHeight, setTrayHeight] = useState(170);
   const [paused, setPaused] = useState(false);
   const [scoreTriggers, setScoreTriggers] = useState<
     Array<{ amount: number; breakdown: Array<[string, number]> }>
@@ -141,7 +140,6 @@ export default function GameScreen() {
     const update = () => {
       const h = el.getBoundingClientRect().height;
       if (h > 0) {
-        setTrayHeight(h);
         engineRef.current?.setBottomReserved(h + 16);
       }
     };
@@ -199,16 +197,6 @@ export default function GameScreen() {
     nav('/menu');
   }, [nav]);
 
-  const platformLabel = useMemo(() => {
-    switch (platform) {
-      case 'ice': return 'Icy platform';
-      case 'bouncy': return 'Bouncy platform';
-      case 'magnetic': return 'Magnetic platform';
-      case 'fragile': return 'Fragile platform';
-      default: return 'Wooden platform';
-    }
-  }, [platform]);
-
   return (
     <div className="relative h-full w-full overflow-hidden">
       <canvas
@@ -238,16 +226,6 @@ export default function GameScreen() {
 
       <ScorePop triggers={scoreTriggers} />
       <Toast message={toast} onDone={() => setToast(null)} />
-
-      <div
-        className="absolute left-1/2 -translate-x-1/2 text-[10px] text-white/50 z-10 pointer-events-none whitespace-nowrap"
-        style={{ bottom: trayHeight + 8 }}
-      >
-        {platformLabel}
-        {mode === 'endless' && ' · Endless'}
-        {mode === 'daily' && ' · Daily'}
-        {mode === 'challenge' && ' · Challenge'}
-      </div>
 
       <PauseModal
         open={paused}

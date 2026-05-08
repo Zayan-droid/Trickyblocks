@@ -59,9 +59,6 @@ const BlockTray = forwardRef<HTMLDivElement, Props>(function BlockTray(
       className="absolute bottom-0 inset-x-0 z-20 pb-[max(env(safe-area-inset-bottom),12px)] pointer-events-none"
     >
       <div className="mx-auto w-full max-w-md px-2 sm:px-3 pointer-events-auto">
-        <div className="text-center text-[9px] font-display tracking-[0.25em] text-accent/85 uppercase select-none mb-1">
-          Blocks · drag onto tower
-        </div>
         <div className="panel px-2 sm:px-3 py-2 sm:py-3 flex items-end justify-center gap-1.5 sm:gap-3 border border-accent/30">
           {slots.map((spec, i) => (
             <div
