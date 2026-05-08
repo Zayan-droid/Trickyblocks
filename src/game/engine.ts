@@ -539,11 +539,10 @@ export class GameEngine {
   }
 
   /**
-   * Free-form placement with a soft magnetic snap. The pointer follows the
-   * cursor smoothly; when it comes within ~6 px of a grid column aligned to
-   * the platform edge, it gently snaps so pieces still align with neighbours.
-   * Odd-width pieces (T/S/Z) align on integer-unit columns; even-width pieces
-   * (I/O/L/J) align on half-unit columns so all cells land on grid positions.
+   * Snap placement to the platform-aligned cell grid. Every drop locks onto
+   * a grid column so pieces always align flush with their neighbours. Odd-
+   * width pieces (T/S/Z) snap on integer-unit columns; even-width pieces
+   * (I/O/L/J) snap on half-unit columns so all cells land on grid positions.
    */
   private snapToGrid(pointerX: number, spec: BlockSpec): number {
     const u = spec.unit;
@@ -554,21 +553,14 @@ export class GameEngine {
     const gridOrigin = platformX - platformW / 2;
     const layout = cellsFor(spec.shape);
 
-    let snapped: number;
+    let placement: number;
     if (layout.width % 2 === 0) {
       const n = Math.round((pointerX - gridOrigin) / u - 0.5);
-      snapped = gridOrigin + (n + 0.5) * u;
+      placement = gridOrigin + (n + 0.5) * u;
     } else {
       const n = Math.round((pointerX - gridOrigin) / u);
-      snapped = gridOrigin + n * u;
+      placement = gridOrigin + n * u;
     }
-
-    // Soft magnetic snap: only pull to the grid column when the cursor is
-    // within MAGNET px of it, otherwise track the cursor freely. This keeps
-    // movement smooth while still helping pieces line up with neighbours.
-    const MAGNET = 6;
-    const dx = snapped - pointerX;
-    const placement = Math.abs(dx) <= MAGNET ? snapped : pointerX;
 
     const halfW = spec.width / 2;
     const canvasW = this.canvas.clientWidth;

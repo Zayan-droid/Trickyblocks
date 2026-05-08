@@ -152,7 +152,9 @@ function makeBody(
     frictionStatic: friction,
     restitution,
     angle,
-    chamfer: { radius: 3 },
+    // Tiny chamfer keeps Matter from getting stuck on sharp corners, but it's
+    // small enough that flat edges still meet flush when blocks stack.
+    chamfer: { radius: 1 },
     sleepThreshold: 30,
   };
   const geom = geomFor(shape, unit);
