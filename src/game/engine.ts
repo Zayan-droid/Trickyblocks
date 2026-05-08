@@ -883,6 +883,7 @@ export class GameEngine {
           this.canvas.clientHeight / 3,
           80,
         );
+        this.bumpShake(5);
         this.cfg.callbacks.onLevel(this.level);
         this.cfg.callbacks.onToast(`Level ${this.level}!`);
       }
@@ -1030,6 +1031,8 @@ export class GameEngine {
       this.cfg.callbacks.onCombo(0);
       this.cfg.callbacks.onCollapse(collapsedThisTick);
       playSfx('wobble', 0.6);
+      // Subtle shake — scales with how many blocks slipped this tick.
+      this.bumpShake(Math.min(12, 4 + collapsedThisTick * 2));
       if (this.collapses >= 3 && this.blocksPlacedCount >= 4) {
         this.lose();
       }
@@ -1058,6 +1061,8 @@ export class GameEngine {
           this.cfg.callbacks.onCombo(0);
           this.cfg.callbacks.onCollapse(1);
           playSfx('wobble', 0.6);
+          // Block hit the ground hard — a bit more shake than a side-slip.
+          this.bumpShake(8);
           this.particles.emitBurst(
             groundHit.position.x,
             this.canvas.clientHeight - 40,
@@ -1080,6 +1085,11 @@ export class GameEngine {
       }
     }
   };
+
+  private bumpShake(intensity: number) {
+    if (this.cfg.reduceMotion) return;
+    if (intensity > this.screenShake) this.screenShake = intensity;
+  }
 
   private lose() {
     if (this.isLost || this.isWon) return;
@@ -1158,20 +1168,37 @@ export class GameEngine {
 
     let topY = this.platformBaseY;
     for (const b of this.placedBlocks) {
+      // Skip blocks that are still falling/tumbling fast — they shouldn't
+      // yank the camera while in motion.
+      if (Math.abs(b.velocity.y) > 4) continue;
       if (b.position.y < topY) topY = b.position.y;
     }
     const towerHeight = this.platformBaseY - topY;
     this.cfg.callbacks.onHeight(towerHeight);
-    // Negative camera shifts world content DOWN on screen, so as the tower
-    // grows past ~50% of the viewport the platform drifts toward the bottom
-    // edge (and eventually off it) while the tower top stays in upper view.
-    // The 1.25 multiplier pushes the platform a bit further than the raw
-    // tower-height delta would suggest.
-    this.targetCameraY = -1.25 * Math.max(
-      0,
-      this.platformBaseY - topY - this.canvas.clientHeight * 0.5,
-    );
-    this.cameraY += (this.targetCameraY - this.cameraY) * 0.06;
+
+    // Camera tracking: keep tower top at ~35% from the top of the viewport
+    // once the tower climbs above that line. Below it, the camera stays put.
+    // Negative cameraY shifts world content DOWN on screen.
+    const viewport = this.canvas.clientHeight;
+    const targetTopOnScreen = viewport * 0.35;
+    let desired = topY - targetTopOnScreen;
+    if (desired > 0) desired = 0; // never scroll below starting position
+    // Lower bound: don't scroll up so far that the platform's top edge
+    // disappears past the canvas bottom (would reveal empty space below).
+    const minCamera = -Math.max(0, this.bottomReserved - 20);
+    if (desired < minCamera) desired = minCamera;
+
+    // Deadband: only adopt a new target if the change is meaningful. Prevents
+    // micro-jitter from constantly nudging the camera on small tower shifts.
+    if (Math.abs(desired - this.targetCameraY) > 18) {
+      this.targetCameraY = desired;
+    }
+    if (this.targetCameraY > 0) this.targetCameraY = 0;
+    if (this.targetCameraY < minCamera) this.targetCameraY = minCamera;
+
+    this.cameraY += (this.targetCameraY - this.cameraY) * 0.09;
+    if (this.cameraY > 0) this.cameraY = 0;
+    if (this.cameraY < minCamera) this.cameraY = minCamera;
 
     this.particles.step(dt);
 
