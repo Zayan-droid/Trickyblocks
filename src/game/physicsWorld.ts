@@ -202,16 +202,6 @@ export function applyWind(world: Matter.World, wind: number) {
   }
 }
 
-export function applyShake(handles: WorldHandles, intensity: number, t: number) {
-  if (intensity <= 0) return;
-  const a = Math.sin(t * 0.012) * intensity * 6;
-  Matter.Body.setPosition(handles.platform, {
-    x: handles.platform.position.x,
-    y: (handles.platform as Matter.Body & { _baseY?: number })._baseY ?? handles.platform.position.y,
-  });
-  Matter.Body.translate(handles.platform, { x: a, y: 0 });
-}
-
 export function applyMagneticPull(handles: WorldHandles, world: Matter.World) {
   const center = handles.platform.position;
   for (const body of world.bodies) {

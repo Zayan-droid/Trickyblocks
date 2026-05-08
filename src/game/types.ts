@@ -33,7 +33,6 @@ export interface ChallengeSpec {
   goalHeight: number;
   goalScore: number;
   wind: number;
-  shake: number;
   bossTag?: string;
 }
 

@@ -50,7 +50,6 @@ export default function ChallengeSelect() {
                     <Tag>{c.shapesAllowed.join('/')} only</Tag>
                   )}
                   {c.wind > 0 && <Tag>wind</Tag>}
-                  {c.shake > 0 && <Tag>quake</Tag>}
                   {boss && <Tag tone="boss">BOSS</Tag>}
                 </div>
                 <div className="mt-3 text-xs text-white/65">

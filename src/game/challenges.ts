@@ -10,7 +10,6 @@ export const CHALLENGES: ChallengeSpec[] = [
     goalHeight: 280,
     goalScore: 350,
     wind: 0,
-    shake: 0,
     bossTag: '',
   },
   {
@@ -22,7 +21,6 @@ export const CHALLENGES: ChallengeSpec[] = [
     goalHeight: 320,
     goalScore: 500,
     wind: 0.55,
-    shake: 0,
     bossTag: 'gales',
   },
   {
@@ -34,7 +32,6 @@ export const CHALLENGES: ChallengeSpec[] = [
     goalHeight: 240,
     goalScore: 300,
     wind: 0,
-    shake: 0,
   },
   {
     id: 'bouncy',
@@ -45,7 +42,6 @@ export const CHALLENGES: ChallengeSpec[] = [
     goalHeight: 220,
     goalScore: 320,
     wind: 0,
-    shake: 0,
   },
   {
     id: 'quake',
@@ -56,7 +52,6 @@ export const CHALLENGES: ChallengeSpec[] = [
     goalHeight: 360,
     goalScore: 600,
     wind: 0.2,
-    shake: 0.7,
     bossTag: 'quake',
   },
   {
@@ -68,7 +63,6 @@ export const CHALLENGES: ChallengeSpec[] = [
     goalHeight: 300,
     goalScore: 480,
     wind: 0,
-    shake: 0.1,
   },
   {
     id: 'zigzag',
@@ -79,7 +73,6 @@ export const CHALLENGES: ChallengeSpec[] = [
     goalHeight: 200,
     goalScore: 420,
     wind: 0.15,
-    shake: 0.2,
     bossTag: 'zigzag',
   },
   {
@@ -91,7 +84,6 @@ export const CHALLENGES: ChallengeSpec[] = [
     goalHeight: 260,
     goalScore: 340,
     wind: 0,
-    shake: 0.15,
   },
   {
     id: 'titan',
@@ -102,7 +94,6 @@ export const CHALLENGES: ChallengeSpec[] = [
     goalHeight: 400,
     goalScore: 800,
     wind: 0.5,
-    shake: 0.7,
     bossTag: 'titan',
   },
 ];

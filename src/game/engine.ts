@@ -1,7 +1,6 @@
 import Matter from 'matter-js';
 import {
   applyMagneticPull,
-  applyShake,
   applyWind,
   createWorld,
   disposeWorld,
@@ -117,7 +116,6 @@ export class GameEngine {
   private cameraY = 0;
   private targetCameraY = 0;
   private wind = 0;
-  private shake = 0;
   private undoStack: Matter.Body[] = [];
   private undosLeft = MAX_UNDOS;
   private shufflesLeft = MAX_SHUFFLES;
@@ -135,7 +133,6 @@ export class GameEngine {
   private blocksCollapsedCount = 0;
   private bestComboThisGame = 0;
   private nearMisses = 0;
-  private shakePhase = 0;
   private rng: () => number;
   private isLost = false;
   private isWon = false;
@@ -178,12 +175,9 @@ export class GameEngine {
       this.platformType,
       220,
     );
-    (this.world.platform as Matter.Body & { _baseY?: number })._baseY =
-      this.platformBaseY;
 
     if (this.challenge) {
       this.wind = this.challenge.wind;
-      this.shake = this.challenge.shake;
       this.bossActive = !!this.challenge.bossTag;
     }
 
@@ -360,7 +354,6 @@ export class GameEngine {
 
     if (dy !== 0 || dx !== 0) {
       Matter.Body.setPosition(this.world.platform, { x: newCx, y: newBaseY });
-      (this.world.platform as Matter.Body & { _baseY?: number })._baseY = newBaseY;
 
       if (dy !== 0) {
         for (const b of this.placedBlocks) {
@@ -933,8 +926,6 @@ export class GameEngine {
       const eff = effectsFor(next);
       if (!this.challenge) {
         this.wind = eff.windSpeed * (Math.random() > 0.5 ? 1 : -1);
-        // Platform stays still during adaptive progression — no shake.
-        this.shake = 0;
       }
       this.applyDifficultyPhysics();
     }
@@ -1156,11 +1147,6 @@ export class GameEngine {
       setTimeout(() => {
         this.wind = original;
       }, 700);
-    }
-
-    if (this.shake > 0) {
-      applyShake(this.world, this.shake, ts);
-      this.shakePhase = ts;
     }
 
     if (this.platformType === 'magnetic') {
