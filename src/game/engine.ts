@@ -140,7 +140,6 @@ export class GameEngine {
   private goalHeight: number;
   private bossActive = false;
   private bossTimer = 0;
-  private screenShake = 0;
   private lastWindBlast = 0;
   private disturbanceTimer = 0;
 
@@ -539,10 +538,11 @@ export class GameEngine {
   }
 
   /**
-   * Snap placement to the platform-aligned cell grid. Every drop locks onto
-   * a grid column so pieces always align flush with their neighbours. Odd-
-   * width pieces (T/S/Z) snap on integer-unit columns; even-width pieces
-   * (I/O/L/J) snap on half-unit columns so all cells land on grid positions.
+   * Free-form placement with a soft magnetic snap. The pointer follows the
+   * cursor smoothly; when it comes within ~6 px of a grid column aligned to
+   * the platform edge, it gently snaps so pieces still align with neighbours.
+   * Odd-width pieces (T/S/Z) align on integer-unit columns; even-width pieces
+   * (I/O/L/J) align on half-unit columns so all cells land on grid positions.
    */
   private snapToGrid(pointerX: number, spec: BlockSpec): number {
     const u = spec.unit;
@@ -553,14 +553,21 @@ export class GameEngine {
     const gridOrigin = platformX - platformW / 2;
     const layout = cellsFor(spec.shape);
 
-    let placement: number;
+    let snapped: number;
     if (layout.width % 2 === 0) {
       const n = Math.round((pointerX - gridOrigin) / u - 0.5);
-      placement = gridOrigin + (n + 0.5) * u;
+      snapped = gridOrigin + (n + 0.5) * u;
     } else {
       const n = Math.round((pointerX - gridOrigin) / u);
-      placement = gridOrigin + n * u;
+      snapped = gridOrigin + n * u;
     }
+
+    // Soft magnetic snap: only pull to the grid column when the cursor is
+    // within MAGNET px of it, otherwise track the cursor freely. This keeps
+    // movement smooth while still helping pieces line up with neighbours.
+    const MAGNET = 6;
+    const dx = snapped - pointerX;
+    const placement = Math.abs(dx) <= MAGNET ? snapped : pointerX;
 
     const halfW = spec.width / 2;
     const canvasW = this.canvas.clientWidth;
@@ -878,7 +885,6 @@ export class GameEngine {
           this.canvas.clientHeight / 3,
           80,
         );
-        this.bumpShake(5);
         this.cfg.callbacks.onLevel(this.level);
         this.cfg.callbacks.onToast(`Level ${this.level}!`);
       }
@@ -1026,8 +1032,6 @@ export class GameEngine {
       this.cfg.callbacks.onCombo(0);
       this.cfg.callbacks.onCollapse(collapsedThisTick);
       playSfx('wobble', 0.6);
-      // Subtle shake — scales with how many blocks slipped this tick.
-      this.bumpShake(Math.min(12, 4 + collapsedThisTick * 2));
       if (this.collapses >= 3 && this.blocksPlacedCount >= 4) {
         this.lose();
       }
@@ -1080,8 +1084,6 @@ export class GameEngine {
           this.cfg.callbacks.onCombo(0);
           this.cfg.callbacks.onCollapse(1);
           playSfx('wobble', 0.6);
-          // Block hit the ground hard — a bit more shake than a side-slip.
-          this.bumpShake(8);
           this.particles.emitBurst(
             groundHit.position.x,
             this.canvas.clientHeight - 40,
@@ -1105,11 +1107,6 @@ export class GameEngine {
     }
   };
 
-  private bumpShake(intensity: number) {
-    if (this.cfg.reduceMotion) return;
-    if (intensity > this.screenShake) this.screenShake = intensity;
-  }
-
   private lose() {
     if (this.isLost || this.isWon) return;
     this.isLost = true;
@@ -1120,7 +1117,6 @@ export class GameEngine {
       '#ff5252',
       60,
     );
-    this.screenShake = 28;
     this.cfg.callbacks.onLost();
     vibrate(80);
   }
@@ -1221,22 +1217,16 @@ export class GameEngine {
 
     this.particles.step(dt);
 
-    if (this.screenShake > 0.1) this.screenShake *= 0.9;
-    else this.screenShake = 0;
-    const sx = (Math.random() - 0.5) * this.screenShake;
-    const sy = (Math.random() - 0.5) * this.screenShake;
-
     const w = this.canvas.clientWidth;
     const h = this.canvas.clientHeight;
     clear(this.ctx, w, h);
     this.ctx.save();
-    this.ctx.translate(sx, sy);
     drawBackdrop({
       ctx: this.ctx,
       width: w,
       height: h,
       cameraY: this.cameraY,
-      shake: this.screenShake,
+      shake: 0,
       reduceMotion: this.cfg.reduceMotion,
     });
 

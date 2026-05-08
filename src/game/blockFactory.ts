@@ -92,9 +92,7 @@ export function generateBlock(opts: FactoryOpts): BlockSpec {
     accent: palette.accent,
     density: 0.0016,
     friction,
-    // Zero restitution = no bounce on landing. Blocks settle flush against the
-    // surface they landed on instead of resting a hair above it.
-    restitution: 0,
+    restitution: 0.02,
   };
 }
 

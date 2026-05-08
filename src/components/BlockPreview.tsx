@@ -50,9 +50,9 @@ export default function BlockPreview({ spec, size = 64 }: Props) {
           <filter id={shadowId} x="-20%" y="-20%" width="140%" height="160%">
             <feDropShadow
               dx="0"
-              dy="2"
-              stdDeviation="1.6"
-              floodColor="rgba(0,0,0,0.45)"
+              dy="3"
+              stdDeviation="2.5"
+              floodColor="rgba(0,0,0,0.5)"
             />
           </filter>
           <clipPath id={`clip-${spec.id}`}>

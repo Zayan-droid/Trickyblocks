@@ -174,9 +174,7 @@ function drawPremiumSilhouette(
   const color = getShapeColor(spec.shape);
   const outline = outlineFor(spec.shape, spec.unit);
   // ~22% of unit cell — soft but readable.
-  // Soft round-over but small enough that two flat edges still read as flush
-  // when blocks stack. ~5px on a 32px cell.
-  const radius = Math.max(3, spec.unit * 0.16);
+  const radius = Math.max(4, spec.unit * 0.22);
 
   let minY = Infinity;
   let maxY = -Infinity;
@@ -192,12 +190,10 @@ function drawPremiumSilhouette(
   // shadow is the rotated silhouette, which is exactly what we want.
   if (!ghost) {
     ctx.save();
-    // Subtle shadow — short enough that it doesn't bleed visibly onto a block
-    // resting underneath, large enough to ground the piece in the scene.
-    ctx.shadowColor = 'rgba(0, 0, 0, 0.38)';
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.42)';
     ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = 3;
-    ctx.shadowBlur = 7;
+    ctx.shadowOffsetY = 7;
+    ctx.shadowBlur = 12;
     ctx.fillStyle = shade(color, -0.45);
     traceRoundedOutline(ctx, outline, radius);
     ctx.fill();
@@ -264,9 +260,7 @@ export function drawDragGhost(
 ) {
   const color = getShapeColor(spec.shape);
   const outline = outlineFor(spec.shape, spec.unit);
-  // Soft round-over but small enough that two flat edges still read as flush
-  // when blocks stack. ~5px on a 32px cell.
-  const radius = Math.max(3, spec.unit * 0.16);
+  const radius = Math.max(4, spec.unit * 0.22);
 
   ctx.save();
   ctx.translate(x, y);
@@ -308,9 +302,7 @@ export function drawLandingSilhouette(
 ) {
   const color = getShapeColor(spec.shape);
   const outline = outlineFor(spec.shape, spec.unit);
-  // Soft round-over but small enough that two flat edges still read as flush
-  // when blocks stack. ~5px on a 32px cell.
-  const radius = Math.max(3, spec.unit * 0.16);
+  const radius = Math.max(4, spec.unit * 0.22);
 
   ctx.save();
   ctx.translate(x, y - cameraY);
