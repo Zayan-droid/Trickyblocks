@@ -1,7 +1,7 @@
 import Matter from 'matter-js';
 import type { BlockSpec, PlatformType } from './types';
-import { geomFor, tracePath } from './shapes';
-import { getAccentColor, getAccentRgba } from './themes';
+import { geomFor, outlineFor, traceRoundedOutline, tracePath } from './shapes';
+import { getAccentColor, getAccentRgba, getShapeColor } from './themes';
 
 export interface RendererOpts {
   ctx: CanvasRenderingContext2D;
@@ -106,6 +106,12 @@ export function drawPlatform(
   ctx.restore();
 }
 
+interface BlockAnimMeta {
+  landAt?: number;
+  landIntensity?: number;
+  glowUntil?: number;
+}
+
 export function drawBlock(
   ctx: CanvasRenderingContext2D,
   body: Matter.Body,
@@ -113,66 +119,133 @@ export function drawBlock(
   cameraY: number,
   ghost = false,
 ) {
-  ctx.save();
-  ctx.globalAlpha = ghost ? 0.45 : 1;
+  const meta = (body as Matter.Body & { _meta?: BlockAnimMeta })._meta;
+  const now = performance.now();
 
-  const renderParts =
-    body.parts.length > 1 ? body.parts.slice(1) : [body];
-  for (const part of renderParts) {
-    drawWorldPolygon(ctx, part.vertices, cameraY, spec, ghost);
+  // Squash-and-stretch on landing. Phase 0..0.4: compress; 0.4..1: rebound.
+  let sx = 1;
+  let sy = 1;
+  if (meta && meta.landAt !== undefined && meta.landIntensity !== undefined) {
+    const SQUASH_DUR = 220;
+    const elapsed = now - meta.landAt;
+    if (elapsed < SQUASH_DUR) {
+      const t = elapsed / SQUASH_DUR;
+      // Triangle envelope peaks at t = 0.4.
+      const env = t < 0.4 ? t / 0.4 : Math.max(0, 1 - (t - 0.4) / 0.6);
+      const k = meta.landIntensity * 0.14;
+      sx = 1 + env * k;
+      sy = 1 - env * k;
+    } else {
+      meta.landAt = undefined;
+      meta.landIntensity = undefined;
+    }
   }
 
-  ctx.globalAlpha = 1;
+  // Combo / perfect-placement glow pulse.
+  let glow = 0;
+  if (meta && meta.glowUntil !== undefined) {
+    const remaining = meta.glowUntil - now;
+    if (remaining > 0) {
+      glow = Math.min(1, remaining / 1000);
+    } else {
+      meta.glowUntil = undefined;
+    }
+  }
+
+  const x = body.position.x;
+  const y = body.position.y - cameraY;
+
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(body.angle);
+  ctx.scale(sx, sy);
+
+  drawPremiumSilhouette(ctx, spec, ghost, glow);
+
   ctx.restore();
 }
 
-function drawWorldPolygon(
+function drawPremiumSilhouette(
   ctx: CanvasRenderingContext2D,
-  vertices: ReadonlyArray<Matter.Vector>,
-  cameraY: number,
   spec: BlockSpec,
   ghost: boolean,
+  glow: number,
 ) {
-  if (vertices.length === 0) return;
+  const color = getShapeColor(spec.shape);
+  const outline = outlineFor(spec.shape, spec.unit);
+  // ~22% of unit cell — soft but readable.
+  const radius = Math.max(4, spec.unit * 0.22);
 
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const p of outline) {
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+
+  if (ghost) ctx.globalAlpha = 0.5;
+
+  // Drop shadow — shadowOffset is in canvas-space pixels, so it stays aimed
+  // downward on screen even when the body is rotated. The shape used for the
+  // shadow is the rotated silhouette, which is exactly what we want.
   if (!ghost) {
-    ctx.fillStyle = 'rgba(0,0,0,0.30)';
-    ctx.beginPath();
-    for (let i = 0; i < vertices.length; i++) {
-      const v = vertices[i];
-      const x = v.x + 4;
-      const y = v.y - cameraY + 6;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
+    ctx.save();
+    ctx.shadowColor = 'rgba(0, 0, 0, 0.42)';
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 7;
+    ctx.shadowBlur = 12;
+    ctx.fillStyle = shade(color, -0.45);
+    traceRoundedOutline(ctx, outline, radius);
     ctx.fill();
+    ctx.restore();
   }
 
-  ctx.fillStyle = spec.color;
-  ctx.beginPath();
-  for (let i = 0; i < vertices.length; i++) {
-    const v = vertices[i];
-    const x = v.x;
-    const y = v.y - cameraY;
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
+  // Combo / perfect-placement halo.
+  if (glow > 0 && !ghost) {
+    ctx.save();
+    ctx.shadowColor = shade(color, 0.4);
+    ctx.shadowBlur = 22 * glow;
+    ctx.shadowOffsetX = 0;
+    ctx.shadowOffsetY = 0;
+    ctx.fillStyle = shade(color, 0.18);
+    traceRoundedOutline(ctx, outline, radius);
+    ctx.fill();
+    ctx.restore();
   }
-  ctx.closePath();
+
+  // Main gradient fill — lighter on top, mid-tone at body, darker on bottom.
+  const grad = ctx.createLinearGradient(0, minY, 0, maxY);
+  grad.addColorStop(0, shade(color, 0.24));
+  grad.addColorStop(0.42, color);
+  grad.addColorStop(1, shade(color, -0.2));
+  ctx.fillStyle = grad;
+  traceRoundedOutline(ctx, outline, radius);
   ctx.fill();
 
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = 'rgba(0,0,0,0.35)';
-  ctx.beginPath();
-  for (let i = 0; i < vertices.length; i++) {
-    const v = vertices[i];
-    const x = v.x;
-    const y = v.y - cameraY;
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  }
-  ctx.closePath();
+  // Top sheen — clip to silhouette, paint a vertical white-fade in the upper
+  // ~35% so it traces the rounded top edges of whatever shape this is.
+  ctx.save();
+  traceRoundedOutline(ctx, outline, radius);
+  ctx.clip();
+  const sheenH = (maxY - minY) * 0.4;
+  const sheen = ctx.createLinearGradient(0, minY, 0, minY + sheenH);
+  sheen.addColorStop(0, 'rgba(255, 255, 255, 0.38)');
+  sheen.addColorStop(0.55, 'rgba(255, 255, 255, 0.08)');
+  sheen.addColorStop(1, 'rgba(255, 255, 255, 0)');
+  ctx.fillStyle = sheen;
+  ctx.fillRect(-2000, minY, 4000, sheenH);
+  ctx.restore();
+
+  // Outer rim for definition. Softer than a true black outline so it doesn't
+  // look stamped — just a touch of darkness at the edge.
+  ctx.lineWidth = 1.5;
+  ctx.lineJoin = 'round';
+  ctx.lineCap = 'round';
+  ctx.strokeStyle = shade(color, -0.5);
+  ctx.globalAlpha = ghost ? 0.4 : 0.5;
+  traceRoundedOutline(ctx, outline, radius);
   ctx.stroke();
+  ctx.globalAlpha = 1;
 }
 
 /**
@@ -185,20 +258,31 @@ export function drawDragGhost(
   y: number,
   angle: number,
 ) {
+  const color = getShapeColor(spec.shape);
+  const outline = outlineFor(spec.shape, spec.unit);
+  const radius = Math.max(4, spec.unit * 0.22);
+
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(angle);
-  ctx.globalAlpha = 0.55;
+  ctx.globalAlpha = 0.6;
 
-  const geom = geomFor(spec.shape, spec.unit);
-
-  ctx.fillStyle = spec.color;
-  tracePath(ctx, geom);
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (const p of outline) {
+    if (p.y < minY) minY = p.y;
+    if (p.y > maxY) maxY = p.y;
+  }
+  const grad = ctx.createLinearGradient(0, minY, 0, maxY);
+  grad.addColorStop(0, shade(color, 0.24));
+  grad.addColorStop(1, shade(color, -0.18));
+  ctx.fillStyle = grad;
+  traceRoundedOutline(ctx, outline, radius);
   ctx.fill();
 
   ctx.lineWidth = 2;
-  ctx.strokeStyle = '#ffffff';
-  tracePath(ctx, geom);
+  ctx.strokeStyle = 'rgba(255,255,255,0.85)';
+  traceRoundedOutline(ctx, outline, radius);
   ctx.stroke();
 
   ctx.globalAlpha = 1;
@@ -206,8 +290,7 @@ export function drawDragGhost(
 }
 
 /**
- * Silhouette of where the block will land if released. Drawn as a hollow
- * dashed outline at the projected resting position.
+ * Silhouette of where the block will land if released.
  */
 export function drawLandingSilhouette(
   ctx: CanvasRenderingContext2D,
@@ -217,22 +300,24 @@ export function drawLandingSilhouette(
   angle: number,
   cameraY: number,
 ) {
+  const color = getShapeColor(spec.shape);
+  const outline = outlineFor(spec.shape, spec.unit);
+  const radius = Math.max(4, spec.unit * 0.22);
+
   ctx.save();
   ctx.translate(x, y - cameraY);
   ctx.rotate(angle);
 
-  const geom = geomFor(spec.shape, spec.unit);
-
-  ctx.globalAlpha = 0.25;
-  ctx.fillStyle = spec.color;
-  tracePath(ctx, geom);
+  ctx.globalAlpha = 0.22;
+  ctx.fillStyle = color;
+  traceRoundedOutline(ctx, outline, radius);
   ctx.fill();
 
   ctx.globalAlpha = 0.95;
   ctx.lineWidth = 2;
   ctx.setLineDash([6, 5]);
   ctx.strokeStyle = '#ffffff';
-  tracePath(ctx, geom);
+  traceRoundedOutline(ctx, outline, radius);
   ctx.stroke();
   ctx.setLineDash([]);
 
@@ -325,4 +410,39 @@ function roundRect(
   ctx.lineTo(x, y + radius);
   ctx.quadraticCurveTo(x, y, x + radius, y);
   ctx.closePath();
+}
+
+/**
+ * Hex-or-rgb color tint helper. amt > 0 lightens, amt < 0 darkens.
+ * Magnitude is fraction of full white/black push (0.2 = 20% toward white/black).
+ */
+function shade(input: string, amt: number): string {
+  let r: number;
+  let g: number;
+  let b: number;
+  if (input.startsWith('#')) {
+    const c = input.slice(1);
+    const num = parseInt(c.length === 3 ? c.split('').map((x) => x + x).join('') : c, 16);
+    r = (num >> 16) & 0xff;
+    g = (num >> 8) & 0xff;
+    b = num & 0xff;
+  } else {
+    const m = input.match(/rgba?\(([^)]+)\)/);
+    if (!m) return input;
+    const [rs, gs, bs] = m[1].split(',').map((s) => parseFloat(s));
+    r = rs;
+    g = gs;
+    b = bs;
+  }
+  if (amt >= 0) {
+    r = Math.round(r + (255 - r) * amt);
+    g = Math.round(g + (255 - g) * amt);
+    b = Math.round(b + (255 - b) * amt);
+  } else {
+    const a = -amt;
+    r = Math.round(r * (1 - a));
+    g = Math.round(g * (1 - a));
+    b = Math.round(b * (1 - a));
+  }
+  return `rgb(${r}, ${g}, ${b})`;
 }

@@ -1,3 +1,5 @@
+import type { BlockShape } from './types';
+
 export type ThemeId = 'classic' | 'neon' | 'sunset' | 'mint' | 'arcade';
 
 export interface Theme {
@@ -86,4 +88,71 @@ export function getAccentColor(): string {
 export function getAccentRgba(alpha: number): string {
   if (cachedAccent === null) cachedAccent = readAccent();
   return `rgb(${cachedAccent} / ${alpha})`;
+}
+
+/**
+ * Per-theme block palettes. Each palette uses 7 hand-picked shades from the
+ * theme's color family so blocks stay visually coherent yet readable.
+ */
+export const SHAPE_PALETTES: Record<ThemeId, Record<BlockShape, string>> = {
+  // Theme 1 — Yellow & Black: golds, ambers, with one cream highlight.
+  classic: {
+    I: '#FFD60A',
+    O: '#FFE26B',
+    T: '#FFB300',
+    S: '#FFEE58',
+    Z: '#FF8F00',
+    L: '#FFF59D',
+    J: '#FFA000',
+  },
+  // Theme 2 — Neon Purple & Black: violets and lavenders, slight cyberpunk lean.
+  neon: {
+    I: '#7B2FF7',
+    O: '#B388FF',
+    T: '#9D4EDD',
+    S: '#5E2BD1',
+    Z: '#4527A0',
+    L: '#CE93D8',
+    J: '#7C4DFF',
+  },
+  // Theme 3 — Warm Orange & Navy: coral / tangerine / peach family.
+  sunset: {
+    I: '#FF8C42',
+    O: '#FFB074',
+    T: '#FF7043',
+    S: '#FF6E40',
+    Z: '#E64A19',
+    L: '#FFCC80',
+    J: '#F4511E',
+  },
+  // Theme 4 — Mint & Slate: greens / teals / aquamarine.
+  mint: {
+    I: '#3DDC97',
+    O: '#A5F0D1',
+    T: '#10B981',
+    S: '#14B8A6',
+    Z: '#059669',
+    L: '#7FE5C8',
+    J: '#2CB67D',
+  },
+  // Theme 5 — Pink & Light Purple: pinks, roses, lavenders.
+  arcade: {
+    I: '#FF4D8D',
+    O: '#FF85A1',
+    T: '#C77DFF',
+    S: '#FFB7C5',
+    Z: '#E91E63',
+    L: '#FFCAD4',
+    J: '#A66DFF',
+  },
+};
+
+function readActiveTheme(): ThemeId {
+  if (typeof document === 'undefined') return DEFAULT_THEME;
+  const v = document.documentElement.getAttribute('data-theme') as ThemeId | null;
+  return v && SHAPE_PALETTES[v] ? v : DEFAULT_THEME;
+}
+
+export function getShapeColor(shape: BlockShape): string {
+  return SHAPE_PALETTES[readActiveTheme()][shape];
 }

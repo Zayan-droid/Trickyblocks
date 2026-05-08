@@ -8,6 +8,11 @@ export interface BodyMeta {
   placedAt: number;
   scored: boolean;
   shattered?: boolean;
+  // Animation state read by the renderer. Set by the engine on collision /
+  // scoring events; the renderer clears these when the animation ends.
+  landAt?: number;
+  landIntensity?: number;
+  glowUntil?: number;
 }
 
 export interface PlatformOptions {

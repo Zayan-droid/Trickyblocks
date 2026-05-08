@@ -195,6 +195,144 @@ export function tracePath(ctx: CanvasRenderingContext2D, geom: ShapeGeom): void 
   }
 }
 
+/**
+ * Closed clockwise outline of a tetromino's silhouette in local coordinates,
+ * centered at origin. Each point is flagged convex (90° outer turn — round
+ * with a soft corner) or concave (270° inner turn — keep sharp). Used by the
+ * premium block renderer to draw a single unified shape with rounded outer
+ * corners only.
+ */
+export interface OutlinePoint {
+  x: number;
+  y: number;
+  convex: boolean;
+}
+
+export function outlineFor(shape: BlockShape, unit: number): OutlinePoint[] {
+  const u = unit;
+  switch (shape) {
+    case 'I':
+      return [
+        { x: -2 * u, y: -0.5 * u, convex: true },
+        { x: 2 * u, y: -0.5 * u, convex: true },
+        { x: 2 * u, y: 0.5 * u, convex: true },
+        { x: -2 * u, y: 0.5 * u, convex: true },
+      ];
+    case 'O':
+      return [
+        { x: -u, y: -u, convex: true },
+        { x: u, y: -u, convex: true },
+        { x: u, y: u, convex: true },
+        { x: -u, y: u, convex: true },
+      ];
+    case 'T':
+      return [
+        { x: -1.5 * u, y: -u, convex: true },
+        { x: 1.5 * u, y: -u, convex: true },
+        { x: 1.5 * u, y: 0, convex: true },
+        { x: 0.5 * u, y: 0, convex: false },
+        { x: 0.5 * u, y: u, convex: true },
+        { x: -0.5 * u, y: u, convex: true },
+        { x: -0.5 * u, y: 0, convex: false },
+        { x: -1.5 * u, y: 0, convex: true },
+      ];
+    case 'S':
+      return [
+        { x: -0.5 * u, y: -u, convex: true },
+        { x: 1.5 * u, y: -u, convex: true },
+        { x: 1.5 * u, y: 0, convex: true },
+        { x: 0.5 * u, y: 0, convex: false },
+        { x: 0.5 * u, y: u, convex: true },
+        { x: -1.5 * u, y: u, convex: true },
+        { x: -1.5 * u, y: 0, convex: true },
+        { x: -0.5 * u, y: 0, convex: false },
+      ];
+    case 'Z':
+      return [
+        { x: -1.5 * u, y: -u, convex: true },
+        { x: 0.5 * u, y: -u, convex: true },
+        { x: 0.5 * u, y: 0, convex: false },
+        { x: 1.5 * u, y: 0, convex: true },
+        { x: 1.5 * u, y: u, convex: true },
+        { x: -0.5 * u, y: u, convex: true },
+        { x: -0.5 * u, y: 0, convex: false },
+        { x: -1.5 * u, y: 0, convex: true },
+      ];
+    case 'L':
+      return [
+        { x: -u, y: -1.5 * u, convex: true },
+        { x: 0, y: -1.5 * u, convex: true },
+        { x: 0, y: 0.5 * u, convex: false },
+        { x: u, y: 0.5 * u, convex: true },
+        { x: u, y: 1.5 * u, convex: true },
+        { x: -u, y: 1.5 * u, convex: true },
+      ];
+    case 'J':
+      return [
+        { x: 0, y: -1.5 * u, convex: true },
+        { x: u, y: -1.5 * u, convex: true },
+        { x: u, y: 1.5 * u, convex: true },
+        { x: -u, y: 1.5 * u, convex: true },
+        { x: -u, y: 0.5 * u, convex: true },
+        { x: 0, y: 0.5 * u, convex: false },
+      ];
+  }
+}
+
+/**
+ * Trace a closed path with rounded outer corners (convex) and sharp inner
+ * corners (concave). Path is drawn at the current ctx origin.
+ */
+export function traceRoundedOutline(
+  ctx: CanvasRenderingContext2D,
+  pts: OutlinePoint[],
+  radius: number,
+): void {
+  const n = pts.length;
+  type Seg = {
+    convex: boolean;
+    pre: { x: number; y: number };
+    post: { x: number; y: number };
+    corner: { x: number; y: number };
+  };
+  const segs: Seg[] = pts.map((p, i) => {
+    const prev = pts[(i - 1 + n) % n];
+    const next = pts[(i + 1) % n];
+    if (!p.convex) {
+      return { convex: false, pre: p, post: p, corner: p };
+    }
+    const dxi = p.x - prev.x;
+    const dyi = p.y - prev.y;
+    const li = Math.hypot(dxi, dyi) || 1;
+    const ux = dxi / li;
+    const uy = dyi / li;
+    const dxo = next.x - p.x;
+    const dyo = next.y - p.y;
+    const lo = Math.hypot(dxo, dyo) || 1;
+    const vx = dxo / lo;
+    const vy = dyo / lo;
+    const r = Math.min(radius, li / 2, lo / 2);
+    return {
+      convex: true,
+      pre: { x: p.x - ux * r, y: p.y - uy * r },
+      post: { x: p.x + vx * r, y: p.y + vy * r },
+      corner: { x: p.x, y: p.y },
+    };
+  });
+
+  ctx.beginPath();
+  ctx.moveTo(segs[0].pre.x, segs[0].pre.y);
+  for (let i = 0; i < n; i++) {
+    const s = segs[i];
+    if (s.convex) {
+      ctx.quadraticCurveTo(s.corner.x, s.corner.y, s.post.x, s.post.y);
+    }
+    const next = segs[(i + 1) % n];
+    ctx.lineTo(next.pre.x, next.pre.y);
+  }
+  ctx.closePath();
+}
+
 /** Build an SVG path string for a ShapeGeom (used by BlockPreview). */
 export function svgPath(geom: ShapeGeom): string {
   return geom.parts

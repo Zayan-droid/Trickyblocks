@@ -859,7 +859,8 @@ export class GameEngine {
     this.score += total;
     this.cfg.callbacks.onScore(total, breakdown);
 
-    if (stable && this.combo >= 3) {
+    const isPerfect = centeredness > 0.92 && this.combo >= 3;
+    if (this.combo >= 3) {
       playSfx('placeGood', 0.9);
       this.particles.emitBurst(
         body.position.x,
@@ -867,6 +868,8 @@ export class GameEngine {
         meta.spec.color,
         12,
       );
+      // Soft halo on the placed block — longer / brighter for perfect stacks.
+      meta.glowUntil = performance.now() + (isPerfect ? 1400 : 900);
     }
 
     if (this.blocksPlacedCount % 3 === 0) {
@@ -1052,6 +1055,30 @@ export class GameEngine {
         a.label === 'ground' || b.label === 'ground'
           ? blockBody
           : null;
+
+      // Squash-on-landing: any block colliding with the platform or another
+      // block at non-trivial downward speed flags itself for a quick visual
+      // squash. Pick the block that's actually falling (larger downward vy).
+      const platformInvolved = a.label === 'platform' || b.label === 'platform';
+      const bothBlocks = a.label.startsWith('block') && b.label.startsWith('block');
+      if (platformInvolved || bothBlocks) {
+        const candidates: Matter.Body[] = [];
+        if (a.label.startsWith('block')) candidates.push(a);
+        if (b.label.startsWith('block')) candidates.push(b);
+        for (const cand of candidates) {
+          const m = (cand as Matter.Body & { _meta?: BodyMeta })._meta;
+          if (!m || m.shattered) continue;
+          const vy = cand.velocity.y;
+          if (vy > 1.6) {
+            m.landAt = performance.now();
+            m.landIntensity = Math.max(
+              m.landIntensity ?? 0,
+              Math.min(1, (vy - 1) / 9),
+            );
+          }
+        }
+      }
+
       if (groundHit) {
         const meta = (groundHit as Matter.Body & { _meta?: BodyMeta })._meta;
         if (meta && !meta.shattered) {
