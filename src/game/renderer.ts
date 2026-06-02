@@ -685,62 +685,55 @@ export function drawBlock(
   // Squash-and-stretch on landing. Phase 0..0.4: compress; 0.4..1: rebound.
   let sx = 1;
   let sy = 1;
+  let jellyRot = 0;
   if (jellyMode) {
-    // ── Jelly soft-body deformation (visual only; collider is rigid). Four
-    // layers multiply together so blocks read as living gelatin:
-    //   1. Stack compression — persistent vertical squish from the weight of
-    //      blocks above (engine writes meta.load 0..1). Volume-preserving:
-    //      shorter ⇒ a little wider.
-    //   2. Landing squash — a 150–250ms decaying bounce: strong vertical
-    //      squash (~15%) + sideways stretch (~8%) easing back to rest.
-    //   3. Falling stretch — while dropping fast and not yet landed, the block
-    //      stretches taller and thins out.
-    //   4. Chain-reaction wobble — a damped jiggle propagated from a nearby
-    //      landing (engine writes meta.wobbleAt / meta.wobbleAmp).
+    // ── Jelly soft-body deformation (visual only; the collider stays rigid).
+    // The block behaves like a DAMPED SPRING: a kick (landing or a wave from a
+    // neighbour, written by the engine to meta.wobbleAt / meta.wobbleAmp) makes
+    // it squash, overshoot, and oscillate several times over ~0.5–1.5s before
+    // settling — a tapped jelly cup, not a single rubber bounce. On top of that
+    // an always-on micro "breathing" keeps a settled tower from ever looking
+    // rigid, and a persistent stack compression squishes lower blocks under the
+    // weight above (meta.load).
     const load = meta?.load ?? 0;
-    let cSy = 1 - load * 0.18;
-    let cSx = 1 + load * 0.09;
+    const cSy = 1 - load * 0.16;
+    const cSx = 1 + load * 0.08;
 
-    let tSy = 1;
-    let tSx = 1;
-    if (meta && meta.landAt !== undefined && meta.landIntensity !== undefined) {
-      const DUR = 230;
-      const e = (now - meta.landAt) / DUR;
-      if (e < 1) {
-        const amp = meta.landIntensity;
-        const env = Math.cos(e * Math.PI * 2.6) * (1 - e); // +1 → squash, decays
-        tSy = 1 - env * 0.15 * amp;
-        tSx = 1 + env * 0.08 * amp;
-      } else {
-        meta.landAt = undefined;
-        meta.landIntensity = undefined;
-      }
-    } else {
-      const vy = body.velocity.y;
-      if (vy > 2) {
-        const s = Math.min(1, (vy - 2) / 12);
-        tSy = 1 + s * 0.1;
-        tSx = 1 - s * 0.05;
-      }
-    }
-
-    let wSy = 1;
-    let wSx = 1;
+    // Damped harmonic oscillator: amp · e^(−λt) · cos(ωt). ω≈23 rad/s ≈ 3.7 Hz
+    // (several visible oscillations); λ chosen so it fades by ~1.5s.
+    let osc = 0;
     if (meta && meta.wobbleAt !== undefined && meta.wobbleAmp) {
-      const WDUR = 650;
-      const e = (now - meta.wobbleAt) / WDUR;
-      if (e < 1) {
-        const w = Math.sin(e * Math.PI * 4) * (1 - e) * meta.wobbleAmp;
-        wSy = 1 - w * 0.06;
-        wSx = 1 + w * 0.06;
+      const e = (now - meta.wobbleAt) / 1000; // seconds
+      if (e < 1.6) {
+        const decay = Math.exp(-3.0 * e);
+        const phase = 23 * e;
+        osc = meta.wobbleAmp * decay * Math.cos(phase);
+        // Rotational spring — a little counter-rotation that decays in sync.
+        jellyRot = meta.wobbleAmp * decay * Math.sin(phase) * 0.06;
       } else {
         meta.wobbleAt = undefined;
         meta.wobbleAmp = undefined;
       }
     }
 
-    sx = cSx * tSx * wSx;
-    sy = cSy * tSy * wSy;
+    // Falling stretch — taller & thinner while dropping (only before its first
+    // kick, i.e. mid-air).
+    let fall = 0;
+    if (meta?.wobbleAt === undefined) {
+      const vy = body.velocity.y;
+      if (vy > 2) fall = -Math.min(1, (vy - 2) / 12);
+    }
+
+    // Always-on breathing, de-synced per block so the tower shimmers softly
+    // even at rest. Applied directly (±1.5%) so it stays perceptible.
+    const ph = spec.id ? spec.id.charCodeAt(spec.id.length - 1) % 16 : 0;
+    const breathe = Math.sin(now * 0.0042 + ph) * 0.015;
+
+    // Combine. Spring + fall drive the big deformation; breathing is layered on
+    // as a steady multiplier. total > 0 ⇒ squash (shorter + wider).
+    const total = osc + fall;
+    sy = cSy * (1 - total * 0.17) * (1 - breathe);
+    sx = cSx * (1 + total * 0.1) * (1 + breathe);
   } else if (meta && meta.landAt !== undefined && meta.landIntensity !== undefined) {
     const SQUASH_DUR = 220;
     const elapsed = now - meta.landAt;
@@ -777,7 +770,7 @@ export function drawBlock(
 
   ctx.save();
   ctx.translate(x, y);
-  ctx.rotate(body.angle);
+  ctx.rotate(body.angle + jellyRot);
   ctx.scale(sx, sy);
   ctx.translate(-off.x, -off.y);
 

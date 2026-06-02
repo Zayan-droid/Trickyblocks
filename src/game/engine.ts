@@ -864,6 +864,9 @@ export class GameEngine {
       this.particles.emitBubblePop(sx, bottomY, 14);
       this.particles.emitJellyDroplets(sx, sy, 10);
       this.particles.emitCandySparkle(sx, sy, 8);
+      // Kick the spring immediately so the piece is visibly mid-jiggle the
+      // instant it appears, and send a soft wave through the rest of the tower.
+      this.propagateJellyWobble(body, 1.3);
     } else {
       this.particles.emitImpact(
         body.position.x,
@@ -1306,28 +1309,42 @@ export class GameEngine {
   private propagateJellyWobble(origin: Matter.Body, intensity: number) {
     const now = performance.now();
     const comboFactor = 1 + Math.min(this.combo, 10) / 10; // 1..2
-    const radius = 120 * comboFactor;
+    const blocks = this.placedBlocks;
+    // Tower height so we can weight the wave by altitude — like a connected
+    // gelatin column, the top sways most and the base barely moves.
+    let topY = this.platformBaseY;
+    for (const b of blocks) if (b.position.y < topY) topY = b.position.y;
+    const towerH = Math.max(1, this.platformBaseY - topY);
+
     const stamp = (b: Matter.Body, amp: number) => {
       const m = (b as Matter.Body & { _meta?: BodyMeta })._meta;
       if (!m) return;
-      if (
-        m.wobbleAt === undefined ||
-        now - m.wobbleAt > 120 ||
-        (m.wobbleAmp ?? 0) < amp
-      ) {
+      // Re-kick only if the new impulse is stronger than what's left of the
+      // current one (or the current one has effectively expired), so a wave
+      // never weakens a block that's already wobbling harder.
+      const age = m.wobbleAt === undefined ? Infinity : (now - m.wobbleAt) / 1000;
+      const remaining = m.wobbleAt === undefined ? 0 : (m.wobbleAmp ?? 0) * Math.exp(-3.0 * age);
+      if (amp > remaining) {
         m.wobbleAt = now;
-        m.wobbleAmp = Math.min(2, amp);
+        m.wobbleAmp = Math.min(2.2, amp);
       }
     };
-    stamp(origin, intensity * comboFactor);
-    for (const b of this.placedBlocks) {
+
+    // The struck block takes the full hit (capped so it stays readable).
+    stamp(origin, Math.min(2.2, intensity * comboFactor));
+
+    // The whole tower receives the wave: amplitude falls off with distance from
+    // the impact and rises with altitude.
+    for (const b of blocks) {
       if (b === origin) continue;
-      const dx = b.position.x - origin.position.x;
-      const dy = b.position.y - origin.position.y;
-      const dist = Math.hypot(dx, dy);
-      if (dist > radius) continue;
-      const amp = intensity * comboFactor * (1 - dist / radius);
-      if (amp >= 0.05) stamp(b, amp);
+      const dist = Math.hypot(
+        b.position.x - origin.position.x,
+        b.position.y - origin.position.y,
+      );
+      const proximity = 1 / (1 + dist / 160);
+      const heightFactor = Math.min(1, Math.max(0, (this.platformBaseY - b.position.y) / towerH));
+      const amp = intensity * comboFactor * proximity * (0.3 + 0.7 * heightFactor);
+      if (amp >= 0.04) stamp(b, amp);
     }
   }
 
@@ -1480,7 +1497,9 @@ export class GameEngine {
               }
               if (intensity > 0.55) playSfx('squishDeep', 0.45);
               this.jellyPlatformSquash = Math.min(1, this.jellyPlatformSquash + intensity * 0.4);
-              this.propagateJellyWobble(cand, 0.6 + intensity * 0.6);
+              // Bigger drops → bigger, longer-ringing jiggle (amplitude drives
+              // how long the damped spring stays visible). Heavy ≈ 1.8.
+              this.propagateJellyWobble(cand, 0.95 + intensity * 0.85);
             }
           }
         }
