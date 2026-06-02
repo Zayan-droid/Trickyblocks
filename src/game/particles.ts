@@ -11,8 +11,13 @@ export interface Particle {
   color: string;
   rotation: number;
   vr: number;
-  shape: 'square' | 'circle' | 'star';
+  shape: 'square' | 'circle' | 'star' | 'shard';
   gravity: number;
+  /**
+   * Optional size growth per ~16ms step. Positive grows the particle over
+   * its lifetime (used for "frost breath" expanding cloud), negative shrinks.
+   */
+  sizeGrow?: number;
 }
 
 export class ParticleSystem {
@@ -29,6 +34,7 @@ export class ParticleSystem {
     size?: number;
     shape?: Particle['shape'];
     gravity?: number;
+    sizeGrow?: number;
   }) {
     const speed = opts.speed ?? 6;
     const spread = opts.spread ?? Math.PI * 2;
@@ -36,6 +42,7 @@ export class ParticleSystem {
     const size = opts.size ?? 6;
     const shape = opts.shape ?? 'square';
     const gravity = opts.gravity ?? 0.3;
+    const sizeGrow = opts.sizeGrow;
     for (let i = 0; i < opts.count; i++) {
       const angle = Math.random() * spread - spread / 2 - Math.PI / 2;
       const v = (0.5 + Math.random()) * speed;
@@ -52,6 +59,7 @@ export class ParticleSystem {
         vr: (Math.random() - 0.5) * 0.4,
         shape,
         gravity,
+        sizeGrow,
       });
     }
   }
@@ -102,6 +110,135 @@ export class ParticleSystem {
     });
   }
 
+  /**
+   * "Frost Breath" — soft expanding mist cloud for ice-mode landings. Slow
+   * outward motion, mild gravity, and growing radius (via sizeGrow) so the
+   * cloud reads as cold air condensing on impact, not a confetti puff.
+   */
+  emitFrostBreath(x: number, y: number, count = 18) {
+    this.emit({
+      x,
+      y,
+      count,
+      colors: ['#F7FDFF', '#DFF6FF', '#ffffff'],
+      speed: 1.8,
+      spread: Math.PI * 2,
+      life: 1100,
+      size: 5,
+      gravity: -0.01,
+      shape: 'circle',
+      sizeGrow: 0.08,
+    });
+  }
+
+  /**
+   * Tight ring of small white/cyan dots expanding outward from a point.
+   * Reads as a frost shockwave on placement — flatter and more deliberate
+   * than emitIceFlakes' upward spray.
+   */
+  emitFrostRing(x: number, y: number, count = 18) {
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.12;
+      const v = 3.6 + Math.random() * 1.2;
+      this.particles.push({
+        x,
+        y,
+        vx: Math.cos(angle) * v,
+        vy: Math.sin(angle) * v * 0.45 - 0.2,
+        life: 520,
+        maxLife: 520,
+        size: 2.2 + Math.random() * 0.7,
+        color: i % 3 === 0 ? '#DDF8FF' : '#FFFFFF',
+        rotation: 0,
+        vr: 0,
+        shape: 'circle',
+        gravity: 0.05,
+      });
+    }
+  }
+
+  /**
+   * Small icy fragments that spray outward on impact. Lighter, faster, and
+   * shorter-lived than emitIceShatter — used as the "chips fly off" puff
+   * when a piece touches down in ice mode.
+   */
+  emitIceFlakes(x: number, y: number, count = 12) {
+    this.emit({
+      x,
+      y,
+      count,
+      colors: ['#F7FDFF', '#DFF6FF', '#C8E0EC', '#ffffff'],
+      speed: 4,
+      spread: Math.PI * 1.4,
+      life: 750,
+      size: 3,
+      gravity: 0.22,
+      shape: 'shard',
+    });
+  }
+
+  /**
+   * Drifting star-shaped snowflakes. Slow downward fall with gentle drift,
+   * long life so they linger after a placement like settling snow dust.
+   */
+  emitSnowflakes(x: number, y: number, count = 10) {
+    this.emit({
+      x,
+      y,
+      count,
+      colors: ['#ffffff', '#F0FAFF', '#DCEDF8'],
+      speed: 2.2,
+      spread: Math.PI * 1.6,
+      life: 1500,
+      size: 4,
+      gravity: 0.04,
+      shape: 'star',
+      sizeGrow: -0.005,
+    });
+  }
+
+  /**
+   * Aurora celebration — soft Aurora-Mint / Snowflake-Cyan motes that rise
+   * and drift upward, used for ice-mode wins and level-ups. Long life and a
+   * gentle negative gravity make them hang in the air like an aurora curtain
+   * while crystal snowflakes (emitSnowflakes) rain down through them.
+   */
+  emitAurora(x: number, y: number, count = 48) {
+    this.emit({
+      x,
+      y,
+      count,
+      colors: ['#CFFFEA', '#DDF8FF', '#A4F0D8', '#ffffff'],
+      speed: 3.2,
+      spread: Math.PI * 1.7,
+      life: 1900,
+      size: 6,
+      gravity: -0.045,
+      shape: 'circle',
+      sizeGrow: -0.004,
+    });
+  }
+
+  /**
+   * Ice shatter — small translucent triangular shards spraying outward.
+   * Used as the "ice cracking exposed core" effect inside a collapse, where
+   * a frosty white cloud envelops a small Pale-Red-Frost hazard burst.
+   */
+  emitIceShatter(x: number, y: number, count = 14) {
+    this.emit({
+      x,
+      y,
+      count,
+      colors: ['#F7FDFF', '#DFF6FF', '#C8E0EC'],
+      speed: 5,
+      spread: Math.PI * 2,
+      life: 700,
+      size: 4,
+      gravity: 0.18,
+      shape: 'shard',
+    });
+  }
+
   step(dt: number) {
     const dts = dt / 16.6;
     for (let i = this.particles.length - 1; i >= 0; i--) {
@@ -116,6 +253,9 @@ export class ParticleSystem {
       p.vy += p.gravity * dts;
       p.vx *= 0.99;
       p.rotation += p.vr * dts;
+      if (p.sizeGrow !== undefined) {
+        p.size = Math.max(0, p.size + p.sizeGrow * dts);
+      }
     }
   }
 
@@ -133,6 +273,16 @@ export class ParticleSystem {
         ctx.fill();
       } else if (p.shape === 'star') {
         drawStar(ctx, 0, 0, 5, p.size, p.size / 2);
+        ctx.fill();
+      } else if (p.shape === 'shard') {
+        // Ice shard — small irregular translucent triangle. Rotated by the
+        // particle's own rotation so a burst looks like a spray of glass-
+        // like fragments.
+        ctx.beginPath();
+        ctx.moveTo(0, -p.size);
+        ctx.lineTo(p.size * 0.7, p.size * 0.5);
+        ctx.lineTo(-p.size * 0.5, p.size * 0.7);
+        ctx.closePath();
         ctx.fill();
       } else {
         ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);

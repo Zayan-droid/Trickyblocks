@@ -33,7 +33,9 @@ import {
   drawBackdrop,
   drawBlock,
   drawDragGhost,
+  drawGustFrostOverlay,
   drawHeightLine,
+  drawIceBackdrop,
   drawInvalidIndicator,
   drawLandingSilhouette,
   drawPlatform,
@@ -142,6 +144,13 @@ export class GameEngine {
   private bossTimer = 0;
   private lastWindBlast = 0;
   private disturbanceTimer = 0;
+  private iceMode = false;
+  private classicMode = false;
+  private snowEmitTimer = 0;
+  private iceGustTimer = 0;
+  private iceGustDir = 1;
+  private iceShakeAmp = 0;
+  private iceFrostFlash = 0;
 
   constructor(cfg: EngineConfig) {
     this.cfg = cfg;
@@ -152,6 +161,8 @@ export class GameEngine {
     this.mode = cfg.mode;
     this.challenge = cfg.challenge ?? null;
     this.platformType = cfg.platform;
+    this.iceMode = cfg.platform === 'ice';
+    this.classicMode = cfg.mode === 'endless' && cfg.platform === 'wood';
     this.goalScore = cfg.goalScore ?? 0;
     this.goalHeight = cfg.goalHeight ?? 0;
     this.rng = this.challenge
@@ -166,6 +177,10 @@ export class GameEngine {
     this.resize();
 
     this.world = createWorld(this.canvas.clientWidth, this.canvas.clientHeight);
+    if (this.classicMode) {
+      this.world.engine.positionIterations = 10;
+      this.world.engine.velocityIterations = 10;
+    }
     this.platformBaseY = this.canvas.clientHeight - this.bottomReserved;
     recreatePlatform(
       this.world,
@@ -460,19 +475,14 @@ export class GameEngine {
       return;
     }
 
-    const projected = this.projectLanding(spec, snappedX);
+    const pointerWorldY = pointerY + this.cameraY;
+    const projected = this.projectLanding(spec, snappedX, pointerWorldY);
     if (!Number.isFinite(projected.y) || projected.cellsSupported === 0) {
       this.inflightDrop.valid = false;
       this.inflightDrop.landingY = pointerY + this.cameraY;
       return;
     }
 
-    // Placement is decided by horizontal position alone — the piece always
-    // falls to its projected rest. Don't reject just because the cursor is
-    // below the projected landing: when slotting a piece into a narrow gap
-    // beside a tall neighbour, the projection lands on top of that neighbour
-    // (where the cell overhangs) but the player's cursor is naturally down in
-    // the gap. Rejecting that case is what made tight placements feel blocked.
     this.inflightDrop.landingY = projected.y;
     this.inflightDrop.valid = true;
   }
@@ -579,16 +589,16 @@ export class GameEngine {
    * which the block's center would settle. Returns Infinity if no supporting
    * surface exists.
    *
-   * The projection picks the DEEPEST rest position the piece can occupy without
-   * overlapping any obstacle. That lets a piece slot down into a pocket between
-   * existing blocks (e.g. an L's column dropping past a Z's top row to land on
-   * the platform with the foot tucked into the Z's bottom-left notch) instead
-   * of always resting on the topmost obstacle that shares a column with one of
-   * its cells.
+   * When `pointerWorldY` is provided and the piece has multiple valid rest
+   * positions (e.g. one ON TOP of a structure and one IN a pocket beneath it),
+   * the one whose center is closest to the pointer wins. That way, dragging
+   * above the stack lands on top, and dragging into the gap slots underneath.
+   * If omitted, falls back to the deepest valid rest.
    */
   private projectLanding(
     spec: BlockSpec,
     pointerX: number,
+    pointerWorldY?: number,
   ): { y: number; cellsSupported: number } {
     const layout = cellsFor(spec.shape);
     const u = spec.unit;
@@ -662,6 +672,7 @@ export class GameEngine {
     const FIT_EPS = 0.5;
     const SUPPORT_TOL = 1;
 
+    const validLandings: { y: number; supported: number }[] = [];
     for (const y of candidates) {
       let overlap = false;
       for (let ci = 0; ci < cells.length && !overlap; ci++) {
@@ -694,13 +705,28 @@ export class GameEngine {
           }
         }
       }
-      return { y, cellsSupported: supported };
+      validLandings.push({ y, supported });
     }
 
-    return {
-      y: candidates[candidates.length - 1],
-      cellsSupported: 0,
-    };
+    if (validLandings.length === 0) {
+      return {
+        y: candidates[candidates.length - 1],
+        cellsSupported: 0,
+      };
+    }
+
+    let chosen = validLandings[0];
+    if (pointerWorldY !== undefined && validLandings.length > 1) {
+      let bestDist = Math.abs(chosen.y - pointerWorldY);
+      for (let i = 1; i < validLandings.length; i++) {
+        const d = Math.abs(validLandings[i].y - pointerWorldY);
+        if (d < bestDist) {
+          bestDist = d;
+          chosen = validLandings[i];
+        }
+      }
+    }
+    return { y: chosen.y, cellsSupported: chosen.supported };
   }
 
   private snapPlace() {
@@ -718,10 +744,21 @@ export class GameEngine {
     // shift the spawn position by the centroid offset so the geom centre lands
     // exactly at the snap column / projected landing Y.
     const off = centroidOffsetFor(spec.shape, spec.unit);
+    // Ice mode: low kinetic friction so a tipping block slides off freely
+    // once it starts moving, but kinetic only — frictionStatic is bumped after
+    // spawn so centred, stationary stacks grip and don't slowly drift under
+    // the ambient turbulence. The slip is reserved for badly placed pieces.
+    // Classic mode: heavier wood — bumped density and a small landing thud via
+    // restitution, with friction left grippy so settled stacks hold.
+    const spawnSpec = this.iceMode
+      ? { ...spec, friction: 0.04, restitution: 0.05 }
+      : this.classicMode
+        ? { ...spec, density: spec.density * 1.6, restitution: 0.06 }
+        : spec;
     const body = spawnBlock(this.world.world, {
       x: snappedX + off.x,
       y: landingY + off.y,
-      spec,
+      spec: spawnSpec,
       angle: 0,
       isStatic: pinned,
     });
@@ -737,9 +774,35 @@ export class GameEngine {
       );
     }
 
-    // Less angular damping at higher difficulty → blocks tip more easily
-    const angDamp = Math.max(0.002, 0.012 - (this.difficulty - 1) * 0.0025);
+    // Less angular damping at higher difficulty → blocks tip more easily. In
+    // ice mode we floor the value so spins keep going long after impact, like
+    // a curling stone gliding on glass. Classic shaves a touch off so heavy
+    // wood pieces rock and tip naturally instead of locking in place.
+    const baseAngDamp = Math.max(0.002, 0.012 - (this.difficulty - 1) * 0.0025);
+    const angDamp = this.iceMode
+      ? Math.min(baseAngDamp, 0.001)
+      : this.classicMode
+        ? Math.max(0.0015, baseAngDamp - 0.003)
+        : baseAngDamp;
     (body as Matter.Body & { angularDamping: number }).angularDamping = angDamp;
+    if (this.iceMode) {
+      // Reduce linear damping too — Matter applies frictionAir per step; the
+      // default damps lateral drift quickly, which kills the slide feel.
+      (body as Matter.Body & { frictionAir: number }).frictionAir = 0.005;
+      // Static friction must be higher than kinetic so a centred stack doesn't
+      // slowly creep under the ambient turbulence. Matter resolves per-pair
+      // static friction as max(a.frictionStatic, b.frictionStatic), so this
+      // value also anchors the bottom block on the platform at rest while the
+      // platform's low kinetic friction (min) still lets it slide off once
+      // motion starts. Compound bodies share friction props via parent.
+      const grip = 0.22;
+      (body as Matter.Body & { frictionStatic: number }).frictionStatic = grip;
+      if (body.parts.length > 1) {
+        for (const p of body.parts) {
+          (p as Matter.Body & { frictionStatic: number }).frictionStatic = grip;
+        }
+      }
+    }
 
     Matter.Body.setVelocity(body, { x: 0, y: 0 });
     Matter.Body.setAngularVelocity(body, 0);
@@ -758,11 +821,24 @@ export class GameEngine {
 
     playSfx('place');
     vibrate(10);
-    this.particles.emitImpact(
-      body.position.x,
-      body.position.y - this.cameraY,
-      8,
-    );
+    if (this.iceMode) {
+      // Ice-mode placement burst: a frost shockwave ring at the contact line,
+      // a soft compression cloud at the block's centre, an outward spray of
+      // ice chips, and a handful of drifting snowflakes settling on top.
+      const sx = body.position.x;
+      const sy = body.position.y - this.cameraY;
+      const bottomY = body.bounds.max.y - this.cameraY;
+      this.particles.emitFrostRing(sx, bottomY, 16);
+      this.particles.emitFrostBreath(sx, sy, 14);
+      this.particles.emitIceFlakes(sx, bottomY, 12);
+      this.particles.emitSnowflakes(sx, sy, 8);
+    } else {
+      this.particles.emitImpact(
+        body.position.x,
+        body.position.y - this.cameraY,
+        8,
+      );
+    }
 
     setTimeout(() => this.scoreAfterSettle(body, 0), 700);
 
@@ -866,12 +942,16 @@ export class GameEngine {
     const isPerfect = centeredness > 0.92 && this.combo >= 3;
     if (this.combo >= 3) {
       playSfx('placeGood', 0.9);
-      this.particles.emitBurst(
-        body.position.x,
-        body.position.y - this.cameraY,
-        meta.spec.color,
-        12,
-      );
+      const cbx = body.position.x;
+      const cby = body.position.y - this.cameraY;
+      if (this.iceMode) {
+        // Combo punch reads as ice cracking: a flat frost shockwave plus a
+        // spray of shards, scaling slightly with the combo length.
+        this.particles.emitFrostRing(cbx, cby, 18);
+        this.particles.emitIceFlakes(cbx, cby, Math.min(22, 12 + this.combo));
+      } else {
+        this.particles.emitBurst(cbx, cby, meta.spec.color, 12);
+      }
       // Soft halo on the placed block — longer / brighter for perfect stacks.
       meta.glowUntil = performance.now() + (isPerfect ? 1400 : 900);
     }
@@ -885,11 +965,14 @@ export class GameEngine {
       if (this.score >= threshold) {
         this.level++;
         playSfx('levelup');
-        this.particles.emitConfetti(
-          this.canvas.clientWidth / 2,
-          this.canvas.clientHeight / 3,
-          80,
-        );
+        const lx = this.canvas.clientWidth / 2;
+        const ly = this.canvas.clientHeight / 3;
+        if (this.iceMode) {
+          this.particles.emitAurora(lx, ly, 50);
+          this.particles.emitSnowflakes(lx, ly, 24);
+        } else {
+          this.particles.emitConfetti(lx, ly, 80);
+        }
         this.cfg.callbacks.onLevel(this.level);
         this.cfg.callbacks.onToast(`Level ${this.level}!`);
       }
@@ -938,11 +1021,14 @@ export class GameEngine {
    * Crank up gravity (and slip) at higher difficulty so the tower feels more
    * sensitive to imperfect placements. Existing blocks are left alone — the
    * change only affects the gravity field and newly-spawned pieces.
+   * Classic mode runs a steeper, heavier curve so wood feels weighty and
+   * imperfect stacks punish faster.
    */
   private applyDifficultyPhysics() {
     const d = this.difficulty;
-    // d=1 → 0.0014 (default). d=5 → ~0.0024 (~70% heavier feel).
-    const scale = 0.0014 + (d - 1) * 0.00025;
+    const scale = this.classicMode
+      ? 0.0021 + (d - 1) * 0.00035
+      : 0.0014 + (d - 1) * 0.00025;
     this.world.engine.gravity.scale = scale;
   }
 
@@ -970,6 +1056,133 @@ export class GameEngine {
     const dir = Math.random() > 0.5 ? 1 : -1;
     Matter.Body.applyForce(target, target.position, { x: dir * forceMag, y: 0 });
     Matter.Sleeping.set(target, false);
+  }
+
+  /**
+   * Ice-mode environmental forces — weather, not arcade effects.
+   *
+   *  1. Layered turbulence breeze: three sines of different periods plus a
+   *     very slow drift trend, summed and scaled. The result is no longer a
+   *     predictable oscillation — players perceive "ice instability" rather
+   *     than math.
+   *
+   *  2. Periodic cold storm gusts (~7s) that wake every block, push the
+   *     tower, trigger a brief camera shake, and paint a white frost
+   *     overlay at the canvas edges that fades over the next second. Plume
+   *     particles use only ice-white / frost-mist (no neon).
+   */
+  private tickIcePhysics(dt: number, ts: number) {
+    if (!this.iceMode) return;
+
+    // Layered turbulence. Three sine harmonics with prime-ratio frequencies
+    // so the sum never repeats cleanly. Magnitude stays well below the
+    // gust force so it nudges off-centre stacks without pushing centred
+    // ones around. A tiny constant drift is added so even at moments where
+    // all the sines cross zero, there's still a hint of wind direction.
+    const turbulence =
+      Math.sin(ts * 0.00041) * 0.000011 +
+      Math.sin(ts * 0.00133) * 0.000007 +
+      Math.sin(ts * 0.00301) * 0.000004 +
+      Math.sin(ts * 0.00007) * 0.000006;
+    for (const body of this.world.world.bodies) {
+      if (body.isStatic) continue;
+      if (!body.label.startsWith('block')) continue;
+      Matter.Body.applyForce(body, body.position, {
+        x: turbulence * body.mass,
+        y: 0,
+      });
+    }
+
+    // Decay shake and frost-flash each frame so the gust visuals fade out
+    // naturally over ~1s after the event.
+    if (this.iceShakeAmp > 0) {
+      this.iceShakeAmp = Math.max(0, this.iceShakeAmp - dt * 0.012);
+    }
+    if (this.iceFrostFlash > 0) {
+      this.iceFrostFlash = Math.max(0, this.iceFrostFlash - dt * 0.001);
+    }
+
+    this.iceGustTimer += dt;
+    const GUST_INTERVAL = 7000;
+    if (this.iceGustTimer >= GUST_INTERVAL) {
+      this.iceGustTimer = 0;
+      this.iceGustDir = Math.random() > 0.5 ? 1 : -1;
+      const dir = this.iceGustDir;
+
+      // Wake every settled block so the whole tower feels the storm.
+      for (const body of this.world.world.bodies) {
+        if (body.isStatic) continue;
+        if (!body.label.startsWith('block')) continue;
+        Matter.Sleeping.set(body, false);
+        Matter.Body.applyForce(body, body.position, {
+          x: dir * 0.00018 * body.mass,
+          y: 0,
+        });
+      }
+
+      // Frost-edge overlay only — the platform shouldn't jitter during a
+      // gust, so the camera-shake is intentionally not triggered. The frost
+      // flash plus the windblown blocks carry the storm cue on their own.
+      if (!this.cfg.reduceMotion) {
+        this.iceFrostFlash = 1;
+      }
+
+      // Plume — ice-white / frost-mist only. No neon.
+      const w = this.canvas.clientWidth;
+      const h = this.canvas.clientHeight;
+      const startX = dir > 0 ? -20 : w + 20;
+      this.particles.emit({
+        x: startX,
+        y: h * 0.28,
+        count: 30,
+        colors: ['#F7FDFF', '#DFF6FF', '#ffffff'],
+        speed: 9,
+        spread: Math.PI / 7,
+        life: 1300,
+        size: 2.2,
+        gravity: 0.018,
+        shape: 'circle',
+      });
+      this.particles.emit({
+        x: startX,
+        y: h * 0.52,
+        count: 22,
+        colors: ['#F7FDFF', '#DFF6FF'],
+        speed: 7,
+        spread: Math.PI / 8,
+        life: 1100,
+        size: 1.6,
+        gravity: 0.018,
+        shape: 'circle',
+      });
+
+      // Plume needs horizontal initial velocity — emit() only spreads
+      // around vertical-up. Patch the latest particles.
+      const total = 52;
+      const particles = this.particles.particles;
+      for (let i = particles.length - total; i < particles.length; i++) {
+        if (i < 0) continue;
+        const p = particles[i];
+        const sideSpeed = 8 + Math.random() * 6;
+        p.vx = dir * sideSpeed;
+        p.vy = (Math.random() - 0.5) * 1.2;
+      }
+
+      // Muffled wind cue — quieter than before. No on-screen toast: the
+      // visuals (shake + frost overlay + plume) carry the message.
+      playSfx('wobble', 0.32);
+    }
+  }
+
+  /**
+   * Apply the current ice-mode camera shake to a base cameraY value.
+   * Returns a tweaked y so the render loop can centralise the shift.
+   */
+  private applyIceShake(baseY: number): number {
+    if (this.iceShakeAmp <= 0) return baseY;
+    // Random small offset, weighted by current amplitude. Decay handled in
+    // tickIcePhysics so the shake naturally fades each frame.
+    return baseY + (Math.random() - 0.5) * this.iceShakeAmp * 2;
   }
 
   /**
@@ -1017,12 +1230,17 @@ export class GameEngine {
         this.combo = 0;
         const px = body.position.x;
         const py = body.position.y;
-        this.particles.emitBurst(
-          px,
-          Math.min(this.canvas.clientHeight - 20, py - this.cameraY),
-          meta.spec.color,
-          14,
-        );
+        // In ice mode, a collapse reads as the block fracturing on the frozen
+        // floor: shards spraying out, fine ice chips, and a puff of drifting
+        // snow that lingers as the piece breaks apart.
+        const screenY = Math.min(this.canvas.clientHeight - 20, py - this.cameraY);
+        if (this.iceMode) {
+          this.particles.emitIceShatter(px, screenY, 20);
+          this.particles.emitIceFlakes(px, screenY, 14);
+          this.particles.emitSnowflakes(px, screenY - 8, 10);
+        } else {
+          this.particles.emitBurst(px, screenY, meta.spec.color, 14);
+        }
         this.placedBlocks.splice(i, 1);
         const undoIdx = this.undoStack.indexOf(body);
         if (undoIdx >= 0) this.undoStack.splice(undoIdx, 1);
@@ -1067,11 +1285,30 @@ export class GameEngine {
           if (!m || m.shattered) continue;
           const vy = cand.velocity.y;
           if (vy > 1.6) {
-            m.landAt = performance.now();
+            const now = performance.now();
+            const sinceLast = now - (m.landAt ?? 0);
+            m.landAt = now;
             m.landIntensity = Math.max(
               m.landIntensity ?? 0,
               Math.min(1, (vy - 1) / 9),
             );
+            // Ice mode: chip a few ice flakes off the impact point, throttled
+            // so the same impact across multiple collision pairs doesn't
+            // flood the scene. Stronger landings → more flakes + a snow puff.
+            if (this.iceMode && sinceLast > 200) {
+              const intensity = Math.min(1, (vy - 1.6) / 6);
+              const flakeCount = 6 + Math.round(intensity * 10);
+              const px = cand.position.x;
+              const py = cand.bounds.max.y - this.cameraY;
+              this.particles.emitIceFlakes(px, py, flakeCount);
+              if (intensity > 0.4) {
+                this.particles.emitSnowflakes(
+                  px,
+                  py - 4,
+                  4 + Math.round(intensity * 6),
+                );
+              }
+            }
           }
         }
       }
@@ -1085,12 +1322,20 @@ export class GameEngine {
           this.cfg.callbacks.onCombo(0);
           this.cfg.callbacks.onCollapse(1);
           playSfx('wobble', 0.6);
-          this.particles.emitBurst(
-            groundHit.position.x,
-            this.canvas.clientHeight - 40,
-            meta.spec.color,
-            14,
-          );
+          if (this.iceMode) {
+            const gx = groundHit.position.x;
+            const gy = this.canvas.clientHeight - 40;
+            this.particles.emitIceShatter(gx, gy, 20);
+            this.particles.emitIceFlakes(gx, gy, 14);
+            this.particles.emitSnowflakes(gx, gy - 8, 10);
+          } else {
+            this.particles.emitBurst(
+              groundHit.position.x,
+              this.canvas.clientHeight - 40,
+              meta.spec.color,
+              14,
+            );
+          }
           meta.shattered = true;
           const toRemove = groundHit;
           setTimeout(() => {
@@ -1112,12 +1357,16 @@ export class GameEngine {
     if (this.isLost || this.isWon) return;
     this.isLost = true;
     playSfx('gameover');
-    this.particles.emitBurst(
-      this.canvas.clientWidth / 2,
-      this.canvas.clientHeight / 2,
-      '#ff5252',
-      60,
-    );
+    const lcx = this.canvas.clientWidth / 2;
+    const lcy = this.canvas.clientHeight / 2;
+    if (this.iceMode) {
+      // The tower shatters: an icy cloud around a Pale-Red-Frost hazard burst
+      // (the palette's only red, reserved for collapses).
+      this.particles.emitIceShatter(lcx, lcy, 40);
+      this.particles.emitBurst(lcx, lcy, '#FF5C7A', 28);
+    } else {
+      this.particles.emitBurst(lcx, lcy, '#ff5252', 60);
+    }
     this.cfg.callbacks.onLost();
     vibrate(80);
   }
@@ -1126,11 +1375,15 @@ export class GameEngine {
     if (this.isLost || this.isWon) return;
     this.isWon = true;
     playSfx('milestone');
-    this.particles.emitConfetti(
-      this.canvas.clientWidth / 2,
-      this.canvas.clientHeight / 3,
-      120,
-    );
+    const wx = this.canvas.clientWidth / 2;
+    const wy = this.canvas.clientHeight / 3;
+    if (this.iceMode) {
+      // Aurora particles with crystal snowflakes raining down through them.
+      this.particles.emitAurora(wx, wy, 70);
+      this.particles.emitSnowflakes(wx, wy - this.canvas.clientHeight / 12, 36);
+    } else {
+      this.particles.emitConfetti(wx, wy, 120);
+    }
     this.cfg.callbacks.onWon();
     vibrate(40);
   }
@@ -1181,6 +1434,7 @@ export class GameEngine {
 
     this.checkForFallenBlocks();
     this.tickDisturbances(dt);
+    this.tickIcePhysics(dt, ts);
 
     let topY = this.platformBaseY;
     for (const b of this.placedBlocks) {
@@ -1220,35 +1474,96 @@ export class GameEngine {
 
     const w = this.canvas.clientWidth;
     const h = this.canvas.clientHeight;
+    // World-space camera Y for this frame. In ice mode we apply the storm
+    // shake here so platform, blocks, particles all wobble together with
+    // the camera (the backdrop is drawn flat so the shake reads as the
+    // viewport shaking, not the sky).
+    const renderCameraY = this.iceMode ? this.applyIceShake(this.cameraY) : this.cameraY;
     clear(this.ctx, w, h);
     this.ctx.save();
-    drawBackdrop({
-      ctx: this.ctx,
-      width: w,
-      height: h,
-      cameraY: this.cameraY,
-      shake: 0,
-      reduceMotion: this.cfg.reduceMotion,
-    });
+    if (this.iceMode) {
+      drawIceBackdrop({
+        ctx: this.ctx,
+        width: w,
+        height: h,
+        cameraY: this.cameraY,
+        shake: 0,
+        reduceMotion: this.cfg.reduceMotion,
+      });
+    } else {
+      drawBackdrop({
+        ctx: this.ctx,
+        width: w,
+        height: h,
+        cameraY: this.cameraY,
+        shake: 0,
+        reduceMotion: this.cfg.reduceMotion,
+      });
+    }
 
     if (this.goalHeight > 0) {
       drawHeightLine(
         this.ctx,
         w,
         this.platformBaseY,
-        this.cameraY,
+        renderCameraY,
         this.goalHeight,
         `Goal: ${Math.round(this.goalHeight / 6)}m`,
       );
     }
 
-    drawPlatform(this.ctx, this.world.platform, this.platformType, this.cameraY);
+    drawPlatform(this.ctx, this.world.platform, this.platformType, renderCameraY);
+
+    // Two-layer continuous snowfield. Far snow is tiny and slow (almost
+    // static drift, low parallax); near snow is larger with slight sway via
+    // a velocity wobble. Emission cadence chosen so a few hundred flakes
+    // are always on screen without overwhelming the particle list.
+    if (this.iceMode && !this.cfg.reduceMotion) {
+      this.snowEmitTimer += dt;
+      if (this.snowEmitTimer > 60) {
+        this.snowEmitTimer = 0;
+        // Far layer (tiny, slow, white).
+        this.particles.emit({
+          x: Math.random() * w,
+          y: -8,
+          count: 1,
+          colors: ['#F7FDFF', '#DFF6FF'],
+          speed: 0.3,
+          spread: Math.PI / 6,
+          life: 8000,
+          size: 0.8 + Math.random() * 0.8,
+          gravity: 0.003,
+          shape: 'circle',
+        });
+        // Near layer (larger, faster, slight sway).
+        this.particles.emit({
+          x: Math.random() * w,
+          y: -8,
+          count: 1,
+          colors: ['#F7FDFF', '#DFF6FF', '#ffffff'],
+          speed: 0.8,
+          spread: Math.PI / 4,
+          life: 4500,
+          size: 2 + Math.random() * 1.8,
+          gravity: 0.014,
+          shape: 'circle',
+        });
+        // Sway: nudge the most-recently-added near flake with a small
+        // horizontal velocity that varies with overall turbulence so snow
+        // drifts along the same direction the wind is moving.
+        const turbulenceNow =
+          Math.sin(ts * 0.00041) +
+          Math.sin(ts * 0.00133) * 0.4;
+        const last = this.particles.particles[this.particles.particles.length - 1];
+        if (last) last.vx += turbulenceNow * 0.15;
+      }
+    }
 
     for (const body of this.world.world.bodies) {
       if (!body.label.startsWith('block')) continue;
       const meta = (body as Matter.Body & { _meta?: BodyMeta })._meta;
       if (!meta) continue;
-      drawBlock(this.ctx, body, meta.spec, this.cameraY, false);
+      drawBlock(this.ctx, body, meta.spec, renderCameraY, false, this.iceMode);
     }
 
     // Drop preview: silhouette at snapped landing position + ghost at raw pointer
@@ -1261,7 +1576,8 @@ export class GameEngine {
           drop.snappedX,
           drop.landingY,
           0,
-          this.cameraY,
+          renderCameraY,
+          this.iceMode,
         );
         drawDragGhost(
           this.ctx,
@@ -1269,6 +1585,7 @@ export class GameEngine {
           drop.pointerX,
           drop.pointerY,
           0,
+          this.iceMode,
         );
       } else {
         drawInvalidIndicator(
@@ -1282,6 +1599,14 @@ export class GameEngine {
     }
 
     this.particles.draw(this.ctx);
+
+    // Gust frost overlay — painted after world + particles so it covers
+    // everything for the brief moment it's visible. Decays back to 0 each
+    // frame inside tickIcePhysics.
+    if (this.iceMode && this.iceFrostFlash > 0) {
+      drawGustFrostOverlay(this.ctx, w, h, this.iceFrostFlash);
+    }
+
     this.ctx.restore();
 
     this.bossTimer += dt;

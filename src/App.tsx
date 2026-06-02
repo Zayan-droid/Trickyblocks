@@ -6,6 +6,7 @@ import MainMenu from './screens/MainMenu';
 import GameScreen from './screens/GameScreen';
 import GameOver from './screens/GameOver';
 import ChallengeSelect from './screens/ChallengeSelect';
+import EndlessSelect from './screens/EndlessSelect';
 import Settings from './screens/Settings';
 import HowToPlay from './screens/HowToPlay';
 import { useSettingsStore } from './store/settingsStore';
@@ -24,6 +25,7 @@ export default function App() {
       <Route path="/play" element={<GameScreen />} />
       <Route path="/over" element={<GameOver />} />
       <Route path="/challenges" element={<ChallengeSelect />} />
+      <Route path="/endless" element={<EndlessSelect />} />
       <Route path="/settings" element={<Settings />} />
       <Route path="/how" element={<HowToPlay />} />
       <Route path="*" element={<Navigate to="/" replace />} />

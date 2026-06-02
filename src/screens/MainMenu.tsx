@@ -25,14 +25,10 @@ export default function MainMenu() {
   const today = getDailyChallenge();
   const dailyDone = dailyHistory.find((d) => d.date === today.date)?.completed;
 
-  const startEndless = () => {
+  const openEndless = () => {
     ensureAudio();
     playSfx('click');
-    resetGame('endless');
-    setPlatform('wood');
-    setChallenge(null);
-    setGoals(0, 0);
-    nav('/play');
+    nav('/endless');
   };
 
   const startDaily = () => {
@@ -85,7 +81,7 @@ export default function MainMenu() {
           </div>
         </div>
 
-        <button onClick={startEndless} className="btn-primary w-full text-2xl py-5">
+        <button onClick={openEndless} className="btn-primary w-full text-2xl py-5">
           <span>♾</span> Endless Mode
           <span className="text-sm opacity-80 ml-2">Lv. {endless}+</span>
         </button>

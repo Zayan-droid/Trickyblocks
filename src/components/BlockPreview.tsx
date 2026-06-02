@@ -2,7 +2,8 @@ import { useMemo } from 'react';
 import type { BlockSpec } from '@/game/types';
 import { geomFor, svgPath } from '@/game/shapes';
 import { useSettingsStore } from '@/store/settingsStore';
-import { SHAPE_PALETTES } from '@/game/themes';
+import { useGameStore } from '@/store/gameStore';
+import { ICE_PALETTE, ICE_SHAPE_PALETTE, SHAPE_PALETTES } from '@/game/themes';
 
 interface Props {
   spec: BlockSpec;
@@ -11,6 +12,7 @@ interface Props {
 
 export default function BlockPreview({ spec, size = 64 }: Props) {
   const themeId = useSettingsStore((s) => s.theme);
+  const iceMode = useGameStore((s) => s.platform === 'ice');
   const path = useMemo(
     () => svgPath(geomFor(spec.shape, spec.unit)),
     [spec.shape, spec.unit],
@@ -21,10 +23,51 @@ export default function BlockPreview({ spec, size = 64 }: Props) {
   const dispW = w * scale;
   const dispH = h * scale;
 
-  const color = SHAPE_PALETTES[themeId][spec.shape];
+  const color = iceMode
+    ? ICE_SHAPE_PALETTE[spec.shape]
+    : SHAPE_PALETTES[themeId][spec.shape];
   const fillId = `g-${spec.id}`;
   const sheenId = `s-${spec.id}`;
   const shadowId = `d-${spec.id}`;
+  const clipId = `clip-${spec.id}`;
+
+  // Internal frost texture for ice mode — two thin fracture lines and a
+  // scattering of tiny speckles. Mirrors the canvas renderer's natural,
+  // calm interior (no high-contrast cracks).
+  const iceInterior = useMemo(() => {
+    if (!iceMode) return { cracks: [] as Array<{ x1: number; y1: number; x2: number; y2: number; bx: number; by: number }>, flakes: [] as Array<{ x: number; y: number; s: number }> };
+    const seedBase = spec.shape.charCodeAt(0);
+    const cracks: Array<{ x1: number; y1: number; x2: number; y2: number; bx: number; by: number }> = [];
+    for (let i = 0; i < 2; i++) {
+      const seed = (seedBase + i * 37) * 9301 + 49297;
+      const sx = -w / 2 + (((seed * 233) % 1000) / 1000) * w;
+      const sy = -h / 2 + (((seed * 977) % 1000) / 1000) * h;
+      const len = (12 + ((seed * 17) % 16)) * (spec.unit / 32);
+      const ang = ((seed * 311) % 1000) / 1000 * Math.PI * 2;
+      const ex = sx + Math.cos(ang) * len;
+      const ey = sy + Math.sin(ang) * len;
+      const bAng = ang + (i % 2 === 0 ? 0.5 : -0.5);
+      const bLen = len * 0.45;
+      cracks.push({
+        x1: sx,
+        y1: sy,
+        x2: ex,
+        y2: ey,
+        bx: sx + Math.cos(bAng) * bLen,
+        by: sy + Math.sin(bAng) * bLen,
+      });
+    }
+    const flakes: Array<{ x: number; y: number; s: number }> = [];
+    const count = Math.round((w * h) / 320);
+    for (let i = 0; i < count; i++) {
+      const seed = (seedBase + i * 53) * 9301 + 49297;
+      const x = -w / 2 + (((seed * 67) % 1000) / 1000) * w;
+      const y = -h / 2 + (((seed * 113) % 1000) / 1000) * h;
+      const s = 0.8 + ((seed * 7) % 100) / 110;
+      flakes.push({ x, y, s });
+    }
+    return { cracks, flakes };
+  }, [iceMode, spec.shape, spec.unit, w, h]);
 
   return (
     <div
@@ -55,7 +98,7 @@ export default function BlockPreview({ spec, size = 64 }: Props) {
               floodColor="rgba(0,0,0,0.5)"
             />
           </filter>
-          <clipPath id={`clip-${spec.id}`}>
+          <clipPath id={clipId}>
             <path d={path} fillRule="evenodd" />
           </clipPath>
         </defs>
@@ -75,8 +118,40 @@ export default function BlockPreview({ spec, size = 64 }: Props) {
             width={w}
             height={h * 0.4}
             fill={`url(#${sheenId})`}
-            clipPath={`url(#clip-${spec.id})`}
+            clipPath={`url(#${clipId})`}
           />
+          {iceMode && (
+            <>
+              <g clipPath={`url(#${clipId})`}>
+                {iceInterior.flakes.map((f, idx) => (
+                  <rect
+                    key={`f-${idx}`}
+                    x={f.x}
+                    y={f.y}
+                    width={f.s}
+                    height={f.s}
+                    fill="rgba(247,253,255,0.55)"
+                  />
+                ))}
+                {iceInterior.cracks.map((c, idx) => (
+                  <g key={`c-${idx}`} stroke="rgba(247,253,255,0.22)" strokeWidth={0.8} fill="none">
+                    <line x1={c.x1} y1={c.y1} x2={c.x2} y2={c.y2} />
+                    <line x1={c.x1} y1={c.y1} x2={c.bx} y2={c.by} />
+                  </g>
+                ))}
+              </g>
+              {/* Soft outer white bloom — same global-illumination feel as the canvas. */}
+              <path
+                d={path}
+                fill="none"
+                stroke={ICE_PALETTE.iceWhite}
+                strokeWidth={1.2}
+                strokeOpacity={0.5}
+                fillRule="evenodd"
+                style={{ filter: 'drop-shadow(0 0 4px rgba(247,253,255,0.7))' }}
+              />
+            </>
+          )}
         </g>
       </svg>
     </div>

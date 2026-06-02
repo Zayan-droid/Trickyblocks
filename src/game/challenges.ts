@@ -3,8 +3,8 @@ import type { ChallengeSpec } from './types';
 export const CHALLENGES: ChallengeSpec[] = [
   {
     id: 'ice-tower',
-    name: 'Frozen Foundation',
-    blurb: 'Stack high on slippery ice. Friction is your enemy.',
+    name: 'Ice Mode',
+    blurb: 'A frozen glacier world. Every block slides on a sheet of ice.',
     platform: 'ice',
     shapesAllowed: ['I', 'O', 'L', 'J'],
     goalHeight: 280,

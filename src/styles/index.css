@@ -85,6 +85,45 @@ button {
   .panel {
     @apply rounded-3xl bg-surface border border-white/10 shadow-[0_10px_24px_rgba(0,0,0,0.45)];
   }
+  /* Ice Mode — frosted slab. Solid pale ice fill, soft cold shadow, and a
+     subtle white snow accumulation along the top edge. Children should use
+     navy text so they read against the light background. */
+  .ice-panel {
+    position: relative;
+    border-radius: 22px;
+    background: linear-gradient(180deg, #F8FBFF 0%, #EAF6FF 65%, #DDF0FB 100%);
+    border: 1px solid #CFE5F5;
+    box-shadow:
+      0 6px 14px rgba(35, 59, 99, 0.16),
+      inset 0 -2px 0 rgba(143, 214, 255, 0.35);
+    color: #233B63;
+  }
+  .ice-panel::before {
+    content: '';
+    position: absolute;
+    inset: -2px 10px auto 10px;
+    height: 6px;
+    background: linear-gradient(180deg, #FFFFFF 0%, rgba(255,255,255,0) 100%);
+    border-radius: 999px;
+    pointer-events: none;
+  }
+  .ice-btn {
+    @apply relative inline-flex items-center justify-center gap-2 px-6 py-3 rounded-2xl font-semibold tracking-wide
+           transition-transform duration-150 active:scale-95 select-none cursor-pointer;
+    color: #233B63;
+    border: 1px solid #BEE8FF;
+    box-shadow:
+      0 4px 0 rgba(92, 184, 232, 0.45),
+      0 8px 18px rgba(35, 59, 99, 0.16);
+  }
+  .ice-btn-primary {
+    @apply ice-btn;
+    background: linear-gradient(180deg, #BEE8FF 0%, #8FD6FF 100%);
+  }
+  .ice-btn-ghost {
+    @apply ice-btn;
+    background: linear-gradient(180deg, #F8FBFF 0%, #EAF6FF 100%);
+  }
   .accent-text {
     color: rgb(var(--accent));
     text-shadow:

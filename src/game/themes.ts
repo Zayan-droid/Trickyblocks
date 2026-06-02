@@ -156,3 +156,38 @@ function readActiveTheme(): ThemeId {
 export function getShapeColor(shape: BlockShape): string {
   return SHAPE_PALETTES[readActiveTheme()][shape];
 }
+
+/**
+ * "Arctic Lightworld" palette — dominant white / pale-blue with glacier
+ * blue as structural accent. Roughly 80% white & ice-blue, 15% soft blue,
+ * 5% rare bright-aqua highlight. Pale red is reserved for hazard cues
+ * (collapses) and never used elsewhere.
+ */
+export const ICE_PALETTE = {
+  iceWhite: '#F7FDFF', // primary light-source feel
+  frostMist: '#DFF6FF', // ambient glow / fog
+  glacierBlue: '#4FD1FF', // structural accent
+  softGlacier: '#A4D4E8', // muted block / edge tone
+  deepIceShadow: '#0B1A2A', // background depth
+  frozenIndigo: '#0A1B3D', // desaturated sky base
+  brightAqua: '#00FFD1', // rare highlight (5-10% of visuals)
+  paleRedFrost: '#FF5C7A', // hazard accent (collapses only)
+} as const;
+
+/**
+ * Per-shape colour used in Ice Mode. All shapes sit in a near-white / pale
+ * ice-blue range so the tower reads as carved frozen objects against the
+ * dark sky. Per-shape variation keeps the pieces distinguishable, with
+ * gradient shading on the block doing the heavy lifting for identity.
+ * Shared between the canvas renderer and the React BlockPreview so the
+ * tray matches placed blocks exactly.
+ */
+export const ICE_SHAPE_PALETTE: Record<BlockShape, string> = {
+  I: '#E5F4FB', // anchor — palest
+  O: '#F0F8FC',
+  T: '#C8E0EC',
+  S: '#DCEFF8',
+  Z: '#A8C8DC', // deepest tint
+  L: '#E8F3F9',
+  J: '#BAD5E5',
+};

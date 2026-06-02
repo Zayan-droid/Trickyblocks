@@ -1,5 +1,6 @@
 import { forwardRef, useEffect, useRef, useState } from 'react';
 import type { BlockSpec } from '@/game/types';
+import { useGameStore } from '@/store/gameStore';
 import BlockPreview from './BlockPreview';
 
 interface Props {
@@ -17,6 +18,7 @@ const BlockTray = forwardRef<HTMLDivElement, Props>(function BlockTray(
   const [dragging, setDragging] = useState<string | null>(null);
   const slotRef = useRef<HTMLDivElement>(null);
   const [slotPx, setSlotPx] = useState(64);
+  const iceMode = useGameStore((s) => s.platform === 'ice');
 
   useEffect(() => {
     if (!dragging) return;
@@ -59,7 +61,11 @@ const BlockTray = forwardRef<HTMLDivElement, Props>(function BlockTray(
       className="absolute bottom-0 inset-x-0 z-20 pb-[max(env(safe-area-inset-bottom),12px)] pointer-events-none"
     >
       <div className="mx-auto w-full max-w-md px-2 sm:px-3 pointer-events-auto">
-        <div className="panel px-2 sm:px-3 py-2 sm:py-3 flex items-end justify-center gap-1.5 sm:gap-3 border border-accent/30">
+        <div
+          className={`px-2 sm:px-3 py-2 sm:py-3 flex items-end justify-center gap-1.5 sm:gap-3 ${
+            iceMode ? 'ice-panel' : 'panel border border-accent/30'
+          }`}
+        >
           {slots.map((spec, i) => (
             <div
               key={spec?.id ?? `empty-${i}`}
@@ -67,8 +73,15 @@ const BlockTray = forwardRef<HTMLDivElement, Props>(function BlockTray(
               className="relative flex-1 min-w-0 max-w-20 flex flex-col items-center transition-transform"
             >
               <div
-                className={`relative w-full aspect-square rounded-2xl flex items-center justify-center
-                  ${spec ? 'bg-surface-2 ring-1 ring-white/15' : 'bg-surface border border-dashed border-white/15'}`}
+                className={`relative w-full aspect-square rounded-2xl flex items-center justify-center ${
+                  iceMode
+                    ? spec
+                      ? 'bg-[#EAF6FF] ring-1 ring-[#BEE8FF] shadow-[inset_0_2px_4px_rgba(143,214,255,0.35)]'
+                      : 'bg-[#F8FBFF]/60 border border-dashed border-[#BEE8FF]'
+                    : spec
+                      ? 'bg-surface-2 ring-1 ring-white/15'
+                      : 'bg-surface border border-dashed border-white/15'
+                }`}
               >
                 {spec && (
                   <button
@@ -92,7 +105,9 @@ const BlockTray = forwardRef<HTMLDivElement, Props>(function BlockTray(
                 )}
               </div>
               <div className="h-3 mt-1 text-[9px] font-display tracking-wider uppercase leading-none text-center">
-                <span className="text-white/40">{spec ? spec.shape : ''}</span>
+                <span className={iceMode ? 'text-[#3A6A8F]' : 'text-white/40'}>
+                  {spec ? spec.shape : ''}
+                </span>
               </div>
             </div>
           ))}
