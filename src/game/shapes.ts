@@ -362,6 +362,49 @@ export function centroidOffsetFor(
   }
 }
 
+/**
+ * Build an SVG path string for a silhouette outline with rounded outer
+ * (convex) corners and sharp inner (concave) corners — the SVG twin of
+ * traceRoundedOutline, used by BlockPreview so jelly tray thumbnails get the
+ * same soft, corner-free look as the in-canvas blocks.
+ */
+export function roundedSvgPath(pts: OutlinePoint[], radius: number): string {
+  const n = pts.length;
+  type Seg = {
+    convex: boolean;
+    pre: { x: number; y: number };
+    post: { x: number; y: number };
+    corner: { x: number; y: number };
+  };
+  const segs: Seg[] = pts.map((p, i) => {
+    const prev = pts[(i - 1 + n) % n];
+    const next = pts[(i + 1) % n];
+    if (!p.convex) return { convex: false, pre: p, post: p, corner: p };
+    const dxi = p.x - prev.x;
+    const dyi = p.y - prev.y;
+    const li = Math.hypot(dxi, dyi) || 1;
+    const dxo = next.x - p.x;
+    const dyo = next.y - p.y;
+    const lo = Math.hypot(dxo, dyo) || 1;
+    const r = Math.min(radius, li / 2, lo / 2);
+    return {
+      convex: true,
+      pre: { x: p.x - (dxi / li) * r, y: p.y - (dyi / li) * r },
+      post: { x: p.x + (dxo / lo) * r, y: p.y + (dyo / lo) * r },
+      corner: { x: p.x, y: p.y },
+    };
+  });
+
+  let d = `M ${segs[0].pre.x} ${segs[0].pre.y}`;
+  for (let i = 0; i < n; i++) {
+    const s = segs[i];
+    if (s.convex) d += ` Q ${s.corner.x} ${s.corner.y} ${s.post.x} ${s.post.y}`;
+    const next = segs[(i + 1) % n];
+    d += ` L ${next.pre.x} ${next.pre.y}`;
+  }
+  return d + ' Z';
+}
+
 /** Build an SVG path string for a ShapeGeom (used by BlockPreview). */
 export function svgPath(geom: ShapeGeom): string {
   return geom.parts

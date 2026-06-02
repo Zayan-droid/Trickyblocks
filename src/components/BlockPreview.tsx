@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import type { BlockSpec } from '@/game/types';
-import { geomFor, svgPath } from '@/game/shapes';
+import { geomFor, outlineFor, roundedSvgPath, svgPath } from '@/game/shapes';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useGameStore } from '@/store/gameStore';
 import {
@@ -19,9 +19,14 @@ export default function BlockPreview({ spec, size = 64 }: Props) {
   const themeId = useSettingsStore((s) => s.theme);
   const iceMode = useGameStore((s) => s.platform === 'ice');
   const jellyMode = useGameStore((s) => s.platform === 'jelly');
+  // Jelly pieces use a rounded silhouette (no sharp corners — they're gummy);
+  // every other mode uses the exact tetromino geometry.
   const path = useMemo(
-    () => svgPath(geomFor(spec.shape, spec.unit)),
-    [spec.shape, spec.unit],
+    () =>
+      jellyMode
+        ? roundedSvgPath(outlineFor(spec.shape, spec.unit), Math.max(8, spec.unit * 0.42))
+        : svgPath(geomFor(spec.shape, spec.unit)),
+    [jellyMode, spec.shape, spec.unit],
   );
   const w = spec.width;
   const h = spec.height;
@@ -115,12 +120,12 @@ export default function BlockPreview({ spec, size = 64 }: Props) {
             <stop offset="0.55" stopColor="rgba(255,255,255,0.08)" />
             <stop offset="1" stopColor="rgba(255,255,255,0)" />
           </linearGradient>
-          <filter id={shadowId} x="-20%" y="-20%" width="140%" height="160%">
+          <filter id={shadowId} x="-30%" y="-20%" width="160%" height="170%">
             <feDropShadow
               dx="0"
-              dy="3"
-              stdDeviation="2.5"
-              floodColor="rgba(0,0,0,0.5)"
+              dy={jellyMode ? 4 : 3}
+              stdDeviation={jellyMode ? 3.6 : 2.5}
+              floodColor={jellyMode ? 'rgba(110,90,165,0.4)' : 'rgba(0,0,0,0.5)'}
             />
           </filter>
           <clipPath id={clipId}>
