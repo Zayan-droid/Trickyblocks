@@ -9,3 +9,5 @@ dist-ssr
 .claude
 *.log
 *.tsbuildinfo
+
+.vercel
