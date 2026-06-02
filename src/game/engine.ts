@@ -154,6 +154,7 @@ export class GameEngine {
   private iceShakeAmp = 0;
   private iceFrostFlash = 0;
   private jellyWiggleTimer = 0;
+  private jellyPlatformSquash = 0;
 
   constructor(cfg: EngineConfig) {
     this.cfg = cfg;
@@ -757,9 +758,9 @@ export class GameEngine {
     const spawnSpec = this.iceMode
       ? { ...spec, friction: 0.04, restitution: 0.05 }
       : this.jellyMode
-        ? // Springy & grippy: the block compresses and bounces once on impact,
-          // then the high friction lets the stack settle without sliding.
-          { ...spec, friction: 0.6, restitution: 0.42 }
+        ? // Gooey & sticky: very grippy, low restitution (visual squash sells
+          // the bounce, not the collider) so the stack settles without sliding.
+          { ...spec, friction: 0.72, restitution: 0.3 }
         : this.classicMode
           ? { ...spec, density: spec.density * 1.6, restitution: 0.06 }
           : spec;
@@ -804,6 +805,20 @@ export class GameEngine {
       // platform's low kinetic friction (min) still lets it slide off once
       // motion starts. Compound bodies share friction props via parent.
       const grip = 0.22;
+      (body as Matter.Body & { frictionStatic: number }).frictionStatic = grip;
+      if (body.parts.length > 1) {
+        for (const p of body.parts) {
+          (p as Matter.Body & { frictionStatic: number }).frictionStatic = grip;
+        }
+      }
+    }
+    if (this.jellyMode) {
+      // Gooey damping: a higher-than-default frictionAir slows and softens all
+      // motion so blocks move like they're suspended in gel — slower
+      // separation, no zippy slides. Sticky static friction makes touching
+      // blocks grip slightly on contact (gel adhesion) without locking.
+      (body as Matter.Body & { frictionAir: number }).frictionAir = 0.03;
+      const grip = 0.85;
       (body as Matter.Body & { frictionStatic: number }).frictionStatic = grip;
       if (body.parts.length > 1) {
         for (const p of body.parts) {
@@ -967,11 +982,15 @@ export class GameEngine {
         this.particles.emitFrostRing(cbx, cby, 18);
         this.particles.emitIceFlakes(cbx, cby, Math.min(22, 12 + this.combo));
       } else if (this.jellyMode) {
-        // Gummy explosion for a combo; a full rainbow jelly burst when the
-        // placement is also perfect.
-        playSfx('pop', 0.6);
-        if (isPerfect) this.particles.emitRainbowBurst(cbx, cby, 28);
-        else this.particles.emitGummyExplosion(cbx, cby, Math.min(28, 16 + this.combo));
+        // Gummy explosion for a combo; a full rainbow jelly burst + satisfying
+        // "plop" when the placement is also perfect.
+        if (isPerfect) {
+          playSfx('plop');
+          this.particles.emitRainbowBurst(cbx, cby, 28);
+        } else {
+          playSfx('pop', 0.6);
+          this.particles.emitGummyExplosion(cbx, cby, Math.min(28, 16 + this.combo));
+        }
       } else {
         this.particles.emitBurst(cbx, cby, meta.spec.color, 12);
       }
@@ -1200,27 +1219,115 @@ export class GameEngine {
   }
 
   /**
-   * Jelly-mode ambient motion. Nothing should feel rigid: every few seconds a
-   * tiny vertical "jiggle" impulse wakes the settled tower so it gently
-   * wobbles and resettles. Much gentler than the ice storm — there is no
-   * camera shake and no horizontal push that could topple a fair stack.
+   * Jelly-mode physics, run every frame. Two parts:
+   *
+   *  1. Elastic self-righting (collapse telegraph): a gentle spring nudges
+   *     blocks that are only slightly tilted back toward upright, so a small
+   *     lean bends and corrects itself — the tower visibly "fights" before it
+   *     gives. The spring is capped to a small tilt window and low angular
+   *     speed, so a block that's genuinely past its balance point is NOT
+   *     rescued: it keeps tipping and falls. This is the tension/personality
+   *     the mode wants while staying skill-based.
+   *
+   *  2. A periodic faint "breathing" jiggle so a settled tower is never
+   *     completely rigid — no camera shake, no toppling push.
+   *
+   * Stack-load (for visual compression) and the platform squash decay are
+   * also refreshed here since this runs once per frame.
    */
   private tickJellyPhysics(dt: number) {
     if (!this.jellyMode) return;
+
+    for (const body of this.world.world.bodies) {
+      if (body.isStatic || body.isSleeping) continue;
+      if (!body.label.startsWith('block')) continue;
+      // Normalise angle to [-PI, PI].
+      let a = body.angle % (Math.PI * 2);
+      if (a > Math.PI) a -= Math.PI * 2;
+      if (a < -Math.PI) a += Math.PI * 2;
+      // Only correct small, slow leans — never fight a real topple, and ignore
+      // a near-zero deadzone so upright blocks don't jitter.
+      if (Math.abs(a) > 0.01 && Math.abs(a) < 0.2 && Math.abs(body.angularVelocity) < 0.22) {
+        Matter.Body.setAngularVelocity(body, body.angularVelocity - a * 0.018);
+      }
+    }
+
+    this.updateJellyStackLoad();
+    this.jellyPlatformSquash = Math.max(0, this.jellyPlatformSquash - dt * 0.0045);
+    const staticDeform = Math.min(0.45, this.placedBlocks.length / 26);
+    (this.world.platform as Matter.Body & { _jellySquash?: number })._jellySquash =
+      Math.min(1, staticDeform + this.jellyPlatformSquash);
+
     this.jellyWiggleTimer += dt;
     const WIGGLE_INTERVAL = 3600;
-    if (this.jellyWiggleTimer < WIGGLE_INTERVAL) return;
-    this.jellyWiggleTimer = 0;
-    for (const body of this.world.world.bodies) {
-      if (body.isStatic) continue;
-      if (!body.label.startsWith('block')) continue;
-      Matter.Sleeping.set(body, false);
-      // A faint upward nudge — the tower bobs and settles, propagating a
-      // little wobble up the stack via the springy restitution.
-      Matter.Body.applyForce(body, body.position, {
-        x: (Math.random() - 0.5) * 0.00002 * body.mass,
-        y: -0.00006 * body.mass,
-      });
+    if (this.jellyWiggleTimer >= WIGGLE_INTERVAL) {
+      this.jellyWiggleTimer = 0;
+      for (const body of this.world.world.bodies) {
+        if (body.isStatic) continue;
+        if (!body.label.startsWith('block')) continue;
+        Matter.Sleeping.set(body, false);
+        // A faint upward nudge — the tower bobs and resettles.
+        Matter.Body.applyForce(body, body.position, {
+          x: (Math.random() - 0.5) * 0.00002 * body.mass,
+          y: -0.00006 * body.mass,
+        });
+      }
+    }
+  }
+
+  /**
+   * Recompute each placed block's visual stack load (0..1) — how many blocks
+   * rest above it within a horizontal overlap. The renderer uses this to
+   * squish lower blocks so the tower reads as having real weight.
+   */
+  private updateJellyStackLoad() {
+    const blocks = this.placedBlocks;
+    for (const b of blocks) {
+      const bm = (b as Matter.Body & { _meta?: BodyMeta })._meta;
+      if (!bm) continue;
+      const bHalf = (b.bounds.max.x - b.bounds.min.x) / 2;
+      let count = 0;
+      for (const o of blocks) {
+        if (o === b) continue;
+        if (o.position.y >= b.position.y - 4) continue; // must sit above b
+        const oHalf = (o.bounds.max.x - o.bounds.min.x) / 2;
+        if (Math.abs(o.position.x - b.position.x) < bHalf + oHalf) count++;
+      }
+      bm.load = Math.min(1, count / 9);
+    }
+  }
+
+  /**
+   * Send a damped wobble outward from a landing/collapse point. Reaction
+   * strength falls off with distance and grows with the current combo, so a
+   * big combo makes the whole tower bounce. Purely visual — the renderer reads
+   * meta.wobbleAt / meta.wobbleAmp; no force is applied to the colliders.
+   */
+  private propagateJellyWobble(origin: Matter.Body, intensity: number) {
+    const now = performance.now();
+    const comboFactor = 1 + Math.min(this.combo, 10) / 10; // 1..2
+    const radius = 120 * comboFactor;
+    const stamp = (b: Matter.Body, amp: number) => {
+      const m = (b as Matter.Body & { _meta?: BodyMeta })._meta;
+      if (!m) return;
+      if (
+        m.wobbleAt === undefined ||
+        now - m.wobbleAt > 120 ||
+        (m.wobbleAmp ?? 0) < amp
+      ) {
+        m.wobbleAt = now;
+        m.wobbleAmp = Math.min(2, amp);
+      }
+    };
+    stamp(origin, intensity * comboFactor);
+    for (const b of this.placedBlocks) {
+      if (b === origin) continue;
+      const dx = b.position.x - origin.position.x;
+      const dy = b.position.y - origin.position.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist > radius) continue;
+      const amp = intensity * comboFactor * (1 - dist / radius);
+      if (amp >= 0.05) stamp(b, amp);
     }
   }
 
@@ -1361,6 +1468,8 @@ export class GameEngine {
             }
             // Jelly mode: a bubble pop at the contact line on each notable
             // impact, throttled the same way so stacked collisions don't flood.
+            // The landing also kicks the platform's squash and sends a
+            // chain-reaction wobble through the rest of the tower.
             if (this.jellyMode && sinceLast > 200) {
               const intensity = Math.min(1, (vy - 1.6) / 6);
               const px = cand.position.x;
@@ -1369,6 +1478,9 @@ export class GameEngine {
               if (intensity > 0.45) {
                 this.particles.emitJellyDroplets(px, py - 4, 4 + Math.round(intensity * 5));
               }
+              if (intensity > 0.55) playSfx('squishDeep', 0.45);
+              this.jellyPlatformSquash = Math.min(1, this.jellyPlatformSquash + intensity * 0.4);
+              this.propagateJellyWobble(cand, 0.6 + intensity * 0.6);
             }
           }
         }
@@ -1382,13 +1494,20 @@ export class GameEngine {
           this.combo = 0;
           this.cfg.callbacks.onCombo(0);
           this.cfg.callbacks.onCollapse(1);
-          playSfx('wobble', 0.6);
+          playSfx(this.jellyMode ? 'flop' : 'wobble', 0.6);
           if (this.iceMode) {
             const gx = groundHit.position.x;
             const gy = this.canvas.clientHeight - 40;
             this.particles.emitIceShatter(gx, gy, 20);
             this.particles.emitIceFlakes(gx, gy, 14);
             this.particles.emitSnowflakes(gx, gy - 8, 10);
+          } else if (this.jellyMode) {
+            const gx = groundHit.position.x;
+            const gy = this.canvas.clientHeight - 40;
+            this.particles.emitJellyDroplets(gx, gy, 16);
+            this.particles.emitBubblePop(gx, gy, 16);
+            // A collapse rattles the whole remaining tower.
+            this.propagateJellyWobble(groundHit, 1.4);
           } else {
             this.particles.emitBurst(
               groundHit.position.x,

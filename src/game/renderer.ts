@@ -368,7 +368,8 @@ export function drawPlatform(
   }
 
   if (type === 'jelly') {
-    drawJellyPlatform(ctx, w, h);
+    const squash = (platform as Matter.Body & { _jellySquash?: number })._jellySquash ?? 0;
+    drawJellyPlatform(ctx, w, h, squash);
     ctx.restore();
     return;
   }
@@ -572,12 +573,20 @@ function drawJellyPlatform(
   ctx: CanvasRenderingContext2D,
   w: number,
   h: number,
+  squash = 0,
 ) {
   const t = performance.now();
-  // Whole-slab jiggle: a slow horizontal squish so the cake looks alive.
+  // Whole-slab jiggle: a slow horizontal squish so the cake looks alive. On
+  // top of that, `squash` (0..1, driven by the engine) flattens the cake when
+  // blocks land and under the weight of a tall stack — a giant gelatin base
+  // that visibly deforms. Anchored at the top edge so it compresses downward.
   const jiggle = Math.sin(t / 700) * 0.02;
+  const sx = 1 + jiggle + squash * 0.14;
+  const sy = 1 - jiggle - squash * 0.2;
   ctx.save();
-  ctx.scale(1 + jiggle, 1 - jiggle);
+  ctx.translate(0, h / 2);
+  ctx.scale(sx, sy);
+  ctx.translate(0, -h / 2);
 
   const r = 16; // very rounded — jelly has no sharp corners.
 
@@ -656,6 +665,9 @@ interface BlockAnimMeta {
   landAt?: number;
   landIntensity?: number;
   glowUntil?: number;
+  load?: number;
+  wobbleAt?: number;
+  wobbleAmp?: number;
 }
 
 export function drawBlock(
@@ -671,21 +683,72 @@ export function drawBlock(
   const now = performance.now();
 
   // Squash-and-stretch on landing. Phase 0..0.4: compress; 0.4..1: rebound.
-  // Jelly blocks squash much harder and ring longer — they're alive.
   let sx = 1;
   let sy = 1;
-  if (meta && meta.landAt !== undefined && meta.landIntensity !== undefined) {
-    const SQUASH_DUR = jellyMode ? 420 : 220;
+  if (jellyMode) {
+    // ── Jelly soft-body deformation (visual only; collider is rigid). Four
+    // layers multiply together so blocks read as living gelatin:
+    //   1. Stack compression — persistent vertical squish from the weight of
+    //      blocks above (engine writes meta.load 0..1). Volume-preserving:
+    //      shorter ⇒ a little wider.
+    //   2. Landing squash — a 150–250ms decaying bounce: strong vertical
+    //      squash (~15%) + sideways stretch (~8%) easing back to rest.
+    //   3. Falling stretch — while dropping fast and not yet landed, the block
+    //      stretches taller and thins out.
+    //   4. Chain-reaction wobble — a damped jiggle propagated from a nearby
+    //      landing (engine writes meta.wobbleAt / meta.wobbleAmp).
+    const load = meta?.load ?? 0;
+    let cSy = 1 - load * 0.18;
+    let cSx = 1 + load * 0.09;
+
+    let tSy = 1;
+    let tSx = 1;
+    if (meta && meta.landAt !== undefined && meta.landIntensity !== undefined) {
+      const DUR = 230;
+      const e = (now - meta.landAt) / DUR;
+      if (e < 1) {
+        const amp = meta.landIntensity;
+        const env = Math.cos(e * Math.PI * 2.6) * (1 - e); // +1 → squash, decays
+        tSy = 1 - env * 0.15 * amp;
+        tSx = 1 + env * 0.08 * amp;
+      } else {
+        meta.landAt = undefined;
+        meta.landIntensity = undefined;
+      }
+    } else {
+      const vy = body.velocity.y;
+      if (vy > 2) {
+        const s = Math.min(1, (vy - 2) / 12);
+        tSy = 1 + s * 0.1;
+        tSx = 1 - s * 0.05;
+      }
+    }
+
+    let wSy = 1;
+    let wSx = 1;
+    if (meta && meta.wobbleAt !== undefined && meta.wobbleAmp) {
+      const WDUR = 650;
+      const e = (now - meta.wobbleAt) / WDUR;
+      if (e < 1) {
+        const w = Math.sin(e * Math.PI * 4) * (1 - e) * meta.wobbleAmp;
+        wSy = 1 - w * 0.06;
+        wSx = 1 + w * 0.06;
+      } else {
+        meta.wobbleAt = undefined;
+        meta.wobbleAmp = undefined;
+      }
+    }
+
+    sx = cSx * tSx * wSx;
+    sy = cSy * tSy * wSy;
+  } else if (meta && meta.landAt !== undefined && meta.landIntensity !== undefined) {
+    const SQUASH_DUR = 220;
     const elapsed = now - meta.landAt;
     if (elapsed < SQUASH_DUR) {
       const t = elapsed / SQUASH_DUR;
-      const k = meta.landIntensity * (jellyMode ? 0.3 : 0.14);
-      // Jelly rebounds with a decaying wobble; default uses a single triangle.
-      const env = jellyMode
-        ? Math.cos(t * Math.PI * 3) * (1 - t)
-        : t < 0.4
-          ? t / 0.4
-          : Math.max(0, 1 - (t - 0.4) / 0.6);
+      // Triangle envelope peaks at t = 0.4.
+      const env = t < 0.4 ? t / 0.4 : Math.max(0, 1 - (t - 0.4) / 0.6);
+      const k = meta.landIntensity * 0.14;
       sx = 1 + env * k;
       sy = 1 - env * k;
     } else {

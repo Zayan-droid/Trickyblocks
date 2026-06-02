@@ -13,6 +13,13 @@ export interface BodyMeta {
   landAt?: number;
   landIntensity?: number;
   glowUntil?: number;
+  // Jelly-mode soft-body state (purely visual — the collider stays rigid):
+  //  load     — 0..1 how much weight sits on this block (stack compression).
+  //  wobbleAt — timestamp a chain-reaction wobble started on this block.
+  //  wobbleAmp— 0..~2 strength of that wobble (decreases with distance/combo).
+  load?: number;
+  wobbleAt?: number;
+  wobbleAmp?: number;
 }
 
 export interface PlatformOptions {
@@ -79,9 +86,10 @@ function platformProps(type: PlatformType) {
     case 'ice':
       return { friction: 0.02, restitution: 0.0 };
     case 'jelly':
-      // Grippy so the stack doesn't slide, but springy so a landing block
-      // compresses and bounces once before settling — the gummy feel.
-      return { friction: 0.6, restitution: 0.45 };
+      // Gooey & sticky: very grippy so blocks prefer staying put (the opposite
+      // of ice), with only a small restitution — the bounce is sold visually by
+      // the squash-and-stretch, not by the collider. Dropped gummy, not a ball.
+      return { friction: 0.72, restitution: 0.3 };
     case 'bouncy':
       return { friction: 0.4, restitution: 0.85 };
     case 'magnetic':

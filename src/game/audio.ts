@@ -13,7 +13,10 @@ type SfxKey =
   | 'gameover'
   | 'milestone'
   | 'boing'
-  | 'pop';
+  | 'pop'
+  | 'squishDeep'
+  | 'plop'
+  | 'flop';
 
 /**
  * Procedurally synthesized audio using Web Audio API → encoded to data URI WAV → Howler.
@@ -160,6 +163,18 @@ const sfxBuilders: Record<SfxKey, () => Float32Array> = {
   // Soft bubble pop — short, round, no hard edge.
   pop: () =>
     synth({ duration: 0.07, startFreq: 880, endFreq: 1500, type: 'sine', attack: 0.002, decay: 0.06 }),
+  // Heavy landing — a deeper, slower squish for big impacts.
+  squishDeep: () =>
+    synth({ duration: 0.34, startFreq: 340, endFreq: 80, type: 'sine', attack: 0.005, decay: 0.3, vibrato: 0.11 }),
+  // Satisfying gummy "plop" for a perfect placement — rounded low→mid swell.
+  plop: () =>
+    mix(
+      synth({ duration: 0.16, startFreq: 200, endFreq: 460, type: 'sine', attack: 0.004, decay: 0.13, vibrato: 0.05 }),
+      synth({ duration: 0.1, startFreq: 520, endFreq: 760, type: 'triangle', attack: 0.004, decay: 0.08 }),
+    ),
+  // Wet jelly flop for collapses — soft, wobbly downward splat.
+  flop: () =>
+    synth({ duration: 0.22, startFreq: 280, endFreq: 70, type: 'sine', attack: 0.005, decay: 0.2, vibrato: 0.14 }),
 };
 
 const cache: Partial<Record<SfxKey, Howl>> = {};
