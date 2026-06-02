@@ -239,6 +239,141 @@ export class ParticleSystem {
     });
   }
 
+  // ── Jelly Mode emitters ────────────────────────────────────────────────
+
+  /**
+   * Soft candy droplets that pop out and fall with a bit of bounce. Used as
+   * the core placement spray — rounded blobs in fruit-jelly colours.
+   */
+  emitJellyDroplets(x: number, y: number, count = 12) {
+    this.emit({
+      x,
+      y,
+      count,
+      colors: ['#FF7EB6', '#FFB68A', '#FFC857', '#7DE2B8', '#77C7FF', '#B99BFF'],
+      speed: 4,
+      spread: Math.PI * 1.4,
+      life: 700,
+      size: 5,
+      gravity: 0.32,
+      shape: 'circle',
+    });
+  }
+
+  /**
+   * Tiny cream-white / candy sparkles — twinkly sugar dust layered on top of
+   * placements and combos. Star-shaped, low gravity, quick fade.
+   */
+  emitCandySparkle(x: number, y: number, count = 10) {
+    this.emit({
+      x,
+      y,
+      count,
+      colors: ['#FFF8F1', '#FFFFFF', '#FFE6F2', '#FFF0C2'],
+      speed: 2.6,
+      spread: Math.PI * 2,
+      life: 600,
+      size: 3,
+      gravity: 0.02,
+      shape: 'star',
+      sizeGrow: -0.004,
+    });
+  }
+
+  /**
+   * A flat ring of expanding bubble dots — reads as a soft bubble pop / jelly
+   * shockwave at the contact point. Flatter and more deliberate than the
+   * droplet spray.
+   */
+  emitBubblePop(x: number, y: number, count = 16) {
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2 + (Math.random() - 0.5) * 0.12;
+      const v = 3 + Math.random() * 1.1;
+      this.particles.push({
+        x,
+        y,
+        vx: Math.cos(angle) * v,
+        vy: Math.sin(angle) * v * 0.5 - 0.2,
+        life: 520,
+        maxLife: 520,
+        size: 2.4 + Math.random() * 0.9,
+        color: i % 2 === 0 ? '#FFF8F1' : '#FFB0D2',
+        rotation: 0,
+        vr: 0,
+        shape: 'circle',
+        gravity: 0.04,
+        sizeGrow: 0.05,
+      });
+    }
+  }
+
+  /**
+   * Big colourful gummy burst for combos — chunky candy bits flung outward
+   * with a satisfying spread, mixed with a few sparkles.
+   */
+  emitGummyExplosion(x: number, y: number, count = 22) {
+    this.emit({
+      x,
+      y,
+      count,
+      colors: ['#FF7EB6', '#FFC857', '#7DE2B8', '#77C7FF', '#B99BFF', '#FFB68A'],
+      speed: 6.5,
+      spread: Math.PI * 2,
+      life: 1000,
+      size: 6,
+      gravity: 0.16,
+      shape: 'circle',
+    });
+    this.emitCandySparkle(x, y, 10);
+  }
+
+  /**
+   * Rainbow jelly burst for a perfect placement — a full radial sweep cycling
+   * through every flavour, ringed by an expanding bubble pop.
+   */
+  emitRainbowBurst(x: number, y: number, count = 28) {
+    const rainbow = ['#FF7EB6', '#FFB68A', '#FFC857', '#7DE2B8', '#77C7FF', '#B99BFF'];
+    for (let i = 0; i < count; i++) {
+      const angle = (i / count) * Math.PI * 2;
+      const v = 5 + Math.random() * 1.5;
+      this.particles.push({
+        x,
+        y,
+        vx: Math.cos(angle) * v,
+        vy: Math.sin(angle) * v,
+        life: 950,
+        maxLife: 950,
+        size: 4 + Math.random() * 2,
+        color: rainbow[i % rainbow.length],
+        rotation: Math.random() * Math.PI,
+        vr: (Math.random() - 0.5) * 0.3,
+        shape: 'circle',
+        gravity: 0.05,
+      });
+    }
+    this.emitBubblePop(x, y, 20);
+  }
+
+  /**
+   * High-score candy shower — gummy bits launched upward that arc back down
+   * through a haze of sugar sparkles. The celebratory "sugar storm".
+   */
+  emitCandyShower(x: number, y: number, count = 60) {
+    this.emit({
+      x,
+      y,
+      count,
+      colors: ['#FF7EB6', '#FFC857', '#7DE2B8', '#77C7FF', '#B99BFF', '#FFB68A', '#FFF8F1'],
+      speed: 9,
+      spread: Math.PI * 1.5,
+      life: 1500,
+      size: 7,
+      gravity: 0.2,
+      shape: 'circle',
+    });
+    this.emitCandySparkle(x, y, 24);
+  }
+
   step(dt: number) {
     const dts = dt / 16.6;
     for (let i = this.particles.length - 1; i >= 0; i--) {

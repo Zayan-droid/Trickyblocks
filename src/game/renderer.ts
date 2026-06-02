@@ -13,6 +13,8 @@ import {
   getShapeColor,
   ICE_PALETTE,
   ICE_SHAPE_PALETTE,
+  JELLY_PALETTE,
+  JELLY_SHAPE_PALETTE,
 } from './themes';
 
 export interface RendererOpts {
@@ -143,6 +145,107 @@ export function drawIceBackdrop(opts: RendererOpts) {
 }
 
 /**
+ * "Candy World" backdrop for Jelly Mode. Everything is soft and rounded:
+ *   1. A warm candy sky gradient (cream → strawberry milk → peach).
+ *   2. Slow-drifting translucent jelly blobs in the far distance.
+ *   3. Puffy marshmallow clouds built from overlapping soft circles.
+ *   4. Rising candy bubbles that gently bob upward.
+ * No hard geometry anywhere — only blobs, clouds, and bubbles.
+ */
+export function drawJellyBackdrop(opts: RendererOpts) {
+  const { ctx, width, height, cameraY, reduceMotion } = opts;
+  const t = reduceMotion ? 0 : performance.now();
+
+  // ── 1. Candy sky.
+  const sky = ctx.createLinearGradient(0, 0, 0, height);
+  sky.addColorStop(0, '#FFF8F1');
+  sky.addColorStop(0.5, '#FFE3EF');
+  sky.addColorStop(1, '#FFD8C7');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, width, height);
+
+  // ── 2. Far jelly blobs — big, very soft, low-opacity wobbling rounded
+  // shapes drifting slowly. Parallax-tied so they ease as the camera climbs.
+  const blobColors = ['#FFB0D2', '#B99BFF', '#7DE2B8', '#FFC857', '#77C7FF'];
+  ctx.globalAlpha = 0.18;
+  for (let i = 0; i < 5; i++) {
+    const seed = (i + 3) * 9301 + 49297;
+    const bx = (((seed * 233) % 1000) / 1000) * width;
+    const drift = Math.sin(t * 0.0002 + i) * 18;
+    const by =
+      (((seed * 977) % 1000) / 1000) * height * 0.7 - cameraY * 0.05 + drift;
+    const r = 60 + ((seed * 17) % 60);
+    const squish = 1 + Math.sin(t * 0.0006 + i * 1.3) * 0.12;
+    ctx.fillStyle = blobColors[i % blobColors.length];
+    ctx.beginPath();
+    ctx.ellipse(bx, by, r * squish, r / squish, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.globalAlpha = 1;
+
+  // ── 3. Puffy marshmallow clouds — clusters of overlapping cream circles.
+  for (let i = 0; i < 4; i++) {
+    const seed = (i + 9) * 9301 + 49297;
+    const cx = (((seed * 233) % 1000) / 1000) * width;
+    const cy =
+      (((seed * 613) % 1000) / 1000) * height * 0.5 -
+      cameraY * 0.08 +
+      Math.sin(t * 0.00015 + i * 2) * 10;
+    drawMarshmallowCloud(ctx, cx, cy, 26 + ((seed * 7) % 16));
+  }
+
+  // ── 4. Rising candy bubbles. Each bobs upward on its own slow cycle and
+  // wraps around when it floats off the top.
+  for (let i = 0; i < 22; i++) {
+    const seed = i * 9301 + 49297;
+    const bx =
+      (((seed * 233 + 17) % 1000) / 1000) * width +
+      Math.sin(t * 0.0007 + i) * 10;
+    const rise = (t * 0.012 + ((seed * 31) % 1000)) % (height + 60);
+    const by = height + 30 - rise - cameraY * 0.03;
+    const yy = ((by % (height + 60)) + (height + 60)) % (height + 60);
+    const r = 2 + ((seed * 13) % 7);
+    ctx.fillStyle = i % 4 === 0 ? 'rgba(255,255,255,0.7)' : 'rgba(255,176,210,0.5)';
+    ctx.beginPath();
+    ctx.arc(bx, yy, r, 0, Math.PI * 2);
+    ctx.fill();
+    // Tiny highlight on each bubble.
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
+    ctx.beginPath();
+    ctx.arc(bx - r * 0.35, yy - r * 0.35, Math.max(0.6, r * 0.28), 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawMarshmallowCloud(
+  ctx: CanvasRenderingContext2D,
+  cx: number,
+  cy: number,
+  r: number,
+) {
+  ctx.save();
+  ctx.fillStyle = 'rgba(255, 252, 248, 0.92)';
+  const puffs: Array<[number, number, number]> = [
+    [-r, 0, r * 0.85],
+    [-r * 0.35, -r * 0.45, r],
+    [r * 0.45, -r * 0.3, r * 0.95],
+    [r, 0.05 * r, r * 0.8],
+    [0, r * 0.2, r * 1.05],
+  ];
+  for (const [dx, dy, rr] of puffs) {
+    ctx.beginPath();
+    ctx.arc(cx + dx, cy + dy, rr, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Soft bottom shadow line to give the cloud a touch of volume.
+  ctx.fillStyle = 'rgba(185, 155, 255, 0.18)';
+  ctx.beginPath();
+  ctx.ellipse(cx, cy + r * 0.55, r * 1.4, r * 0.4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.restore();
+}
+
+/**
  * Optional screen-edge frost flash, painted on top of everything by the
  * engine when a cold gust hits. `intensity` runs 0..1 and fades out in the
  * engine; this function just shapes the vignette into white-ice tones.
@@ -260,6 +363,12 @@ export function drawPlatform(
 
   if (type === 'ice') {
     drawIcePlatform(ctx, w, h);
+    ctx.restore();
+    return;
+  }
+
+  if (type === 'jelly') {
+    drawJellyPlatform(ctx, w, h);
     ctx.restore();
     return;
   }
@@ -453,6 +562,96 @@ function drawIcePlatform(
   ctx.fillText('❄', 0, 1);
 }
 
+/**
+ * Giant jelly-cake platform for Jelly Mode: a thick layered gelatin slab with
+ * pill-rounded corners, a glossy top sheen, a wobbling jiggle as a whole, and
+ * suspended candy bubbles inside. Soft diffuse candy-purple shadow — no harsh
+ * black. The same dark "legs" anchor it into the void below.
+ */
+function drawJellyPlatform(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+) {
+  const t = performance.now();
+  // Whole-slab jiggle: a slow horizontal squish so the cake looks alive.
+  const jiggle = Math.sin(t / 700) * 0.02;
+  ctx.save();
+  ctx.scale(1 + jiggle, 1 - jiggle);
+
+  const r = 16; // very rounded — jelly has no sharp corners.
+
+  // Soft diffuse candy shadow.
+  ctx.fillStyle = 'rgba(110, 90, 165, 0.32)';
+  roundRect(ctx, -w / 2 + 4, -h / 2 + 9, w, h, r);
+  ctx.fill();
+
+  // Body — layered gelatin. Cream sheen up top, strawberry body, berry-shadow
+  // underbelly so it reads as a dessert slice.
+  const body = ctx.createLinearGradient(0, -h / 2, 0, h / 2);
+  body.addColorStop(0, JELLY_PALETTE.cream);
+  body.addColorStop(0.28, '#FFB0D2');
+  body.addColorStop(0.7, JELLY_PALETTE.strawberry);
+  body.addColorStop(1, '#C25C8E');
+  ctx.fillStyle = body;
+  roundRect(ctx, -w / 2, -h / 2, w, h, r);
+  ctx.fill();
+
+  // Clip the interior detailing to the slab.
+  ctx.save();
+  roundRect(ctx, -w / 2, -h / 2, w, h, r);
+  ctx.clip();
+
+  // A lighter cream "cream layer" band across the upper third.
+  ctx.fillStyle = 'rgba(255, 248, 241, 0.55)';
+  ctx.fillRect(-w / 2, -h / 2 + 5, w, 6);
+
+  // Glossy top sheen.
+  const sheen = ctx.createLinearGradient(0, -h / 2, 0, -h / 2 + 10);
+  sheen.addColorStop(0, 'rgba(255,255,255,0.9)');
+  sheen.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = sheen;
+  ctx.fillRect(-w / 2, -h / 2, w, 10);
+
+  // Suspended candy bubbles drifting inside the gelatin.
+  for (let i = 0; i < 7; i++) {
+    const seed = (i + 5) * 9301 + 49297;
+    const bx = -w / 2 + 12 + (((seed * 233) % 1000) / 1000) * (w - 24);
+    const baseY = -h / 2 + 6 + (((seed * 977) % 1000) / 1000) * (h - 12);
+    const by = baseY + Math.sin(t / (1600 + (seed % 800)) + i) * 1.4;
+    const rad = 1.8 + ((seed * 17) % 100) / 70;
+    ctx.fillStyle = 'rgba(255, 248, 241, 0.6)';
+    ctx.beginPath();
+    ctx.arc(bx, by, rad, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // Soft cream rim highlight (no hard stroke).
+  ctx.save();
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = 'rgba(255, 248, 241, 0.7)';
+  roundRect(ctx, -w / 2 + 1, -h / 2 + 1, w - 2, h - 2, r);
+  ctx.stroke();
+  ctx.restore();
+
+  // Marshmallow supports / legs anchoring the cake below.
+  ctx.fillStyle = '#E9B7CF';
+  roundRect(ctx, -w / 2 + 16, h / 2 - 2, 16, 240, 8);
+  ctx.fill();
+  roundRect(ctx, w / 2 - 32, h / 2 - 2, 16, 240, 8);
+  ctx.fill();
+
+  // Candy glyph.
+  ctx.font = '14px Fredoka';
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = 'rgba(122, 46, 85, 0.85)';
+  ctx.fillText('🍮', 0, 1);
+
+  ctx.restore();
+}
+
 interface BlockAnimMeta {
   landAt?: number;
   landIntensity?: number;
@@ -466,21 +665,27 @@ export function drawBlock(
   cameraY: number,
   ghost = false,
   iceMode = false,
+  jellyMode = false,
 ) {
   const meta = (body as Matter.Body & { _meta?: BlockAnimMeta })._meta;
   const now = performance.now();
 
   // Squash-and-stretch on landing. Phase 0..0.4: compress; 0.4..1: rebound.
+  // Jelly blocks squash much harder and ring longer — they're alive.
   let sx = 1;
   let sy = 1;
   if (meta && meta.landAt !== undefined && meta.landIntensity !== undefined) {
-    const SQUASH_DUR = 220;
+    const SQUASH_DUR = jellyMode ? 420 : 220;
     const elapsed = now - meta.landAt;
     if (elapsed < SQUASH_DUR) {
       const t = elapsed / SQUASH_DUR;
-      // Triangle envelope peaks at t = 0.4.
-      const env = t < 0.4 ? t / 0.4 : Math.max(0, 1 - (t - 0.4) / 0.6);
-      const k = meta.landIntensity * 0.14;
+      const k = meta.landIntensity * (jellyMode ? 0.3 : 0.14);
+      // Jelly rebounds with a decaying wobble; default uses a single triangle.
+      const env = jellyMode
+        ? Math.cos(t * Math.PI * 3) * (1 - t)
+        : t < 0.4
+          ? t / 0.4
+          : Math.max(0, 1 - (t - 0.4) / 0.6);
       sx = 1 + env * k;
       sy = 1 - env * k;
     } else {
@@ -513,7 +718,7 @@ export function drawBlock(
   ctx.scale(sx, sy);
   ctx.translate(-off.x, -off.y);
 
-  drawPremiumSilhouette(ctx, spec, ghost, glow, iceMode);
+  drawPremiumSilhouette(ctx, spec, ghost, glow, iceMode, jellyMode);
 
   ctx.restore();
 }
@@ -524,14 +729,21 @@ function drawPremiumSilhouette(
   ghost: boolean,
   glow: number,
   iceMode = false,
+  jellyMode = false,
 ) {
-  // In ice mode every block reads as carved ice: a cool blue tint instead of
-  // the per-shape palette. The shape still varies in hue slightly so the
-  // pieces remain distinguishable at a glance.
-  const color = iceMode ? iceTintFor(spec.shape) : getShapeColor(spec.shape);
+  // In ice mode every block reads as carved ice (cool blue tint); in jelly
+  // mode every block is a bright translucent gummy flavour. Otherwise use the
+  // active theme's per-shape palette.
+  const color = jellyMode
+    ? jellyTintFor(spec.shape)
+    : iceMode
+      ? iceTintFor(spec.shape)
+      : getShapeColor(spec.shape);
   const outline = outlineFor(spec.shape, spec.unit);
-  // ~22% of unit cell — soft but readable.
-  const radius = Math.max(4, spec.unit * 0.22);
+  // Jelly is very rounded (no sharp corners); ice/default ~22% of unit cell.
+  const radius = jellyMode
+    ? Math.max(8, spec.unit * 0.42)
+    : Math.max(4, spec.unit * 0.22);
 
   let minY = Infinity;
   let maxY = -Infinity;
@@ -546,11 +758,19 @@ function drawPremiumSilhouette(
   // rather than weighing down a lit world.
   if (!ghost) {
     ctx.save();
-    ctx.shadowColor = iceMode ? 'rgba(11, 26, 42, 0.45)' : 'rgba(0, 0, 0, 0.42)';
+    ctx.shadowColor = jellyMode
+      ? 'rgba(110, 90, 165, 0.35)'
+      : iceMode
+        ? 'rgba(11, 26, 42, 0.45)'
+        : 'rgba(0, 0, 0, 0.42)';
     ctx.shadowOffsetX = 0;
-    ctx.shadowOffsetY = iceMode ? 5 : 7;
-    ctx.shadowBlur = iceMode ? 14 : 12;
-    ctx.fillStyle = iceMode ? '#1c3556' : shade(color, -0.45);
+    ctx.shadowOffsetY = jellyMode ? 6 : iceMode ? 5 : 7;
+    ctx.shadowBlur = jellyMode ? 16 : iceMode ? 14 : 12;
+    ctx.fillStyle = jellyMode
+      ? JELLY_PALETTE.candyShadow
+      : iceMode
+        ? '#1c3556'
+        : shade(color, -0.45);
     traceRoundedOutline(ctx, outline, radius);
     ctx.fill();
     ctx.restore();
@@ -560,18 +780,22 @@ function drawPremiumSilhouette(
   // Ice-White bloom (perfect) or muted Glacier-Blue (combo) — natural
   // light, not arcade neon.
   if (glow > 0 && !ghost) {
-    const haloColor = iceMode
+    const haloColor = jellyMode
       ? glow > 0.85
-        ? ICE_PALETTE.iceWhite
-        : ICE_PALETTE.glacierBlue
-      : shade(color, 0.4);
+        ? JELLY_PALETTE.cream
+        : shade(color, 0.3)
+      : iceMode
+        ? glow > 0.85
+          ? ICE_PALETTE.iceWhite
+          : ICE_PALETTE.glacierBlue
+        : shade(color, 0.4);
     ctx.save();
     ctx.shadowColor = haloColor;
-    ctx.shadowBlur = (iceMode ? 26 : 22) * glow;
+    ctx.shadowBlur = (jellyMode ? 28 : iceMode ? 26 : 22) * glow;
     ctx.shadowOffsetX = 0;
     ctx.shadowOffsetY = 0;
-    ctx.fillStyle = iceMode ? haloColor : shade(color, 0.18);
-    ctx.globalAlpha = iceMode ? 0.4 : 1;
+    ctx.fillStyle = jellyMode ? haloColor : iceMode ? haloColor : shade(color, 0.18);
+    ctx.globalAlpha = jellyMode ? 0.45 : iceMode ? 0.4 : 1;
     traceRoundedOutline(ctx, outline, radius);
     ctx.fill();
     ctx.globalAlpha = 1;
@@ -582,7 +806,13 @@ function drawPremiumSilhouette(
   // In ice mode the bottom is only slightly darker so the block reads as a
   // translucent crystal, not an opaque painted shape.
   const grad = ctx.createLinearGradient(0, minY, 0, maxY);
-  if (iceMode) {
+  if (jellyMode) {
+    // Bright translucent gummy: a cream-tinted lit top, saturated body, and
+    // a deeper but still soft bottom — like light passing through gelatin.
+    grad.addColorStop(0, shade(color, 0.42));
+    grad.addColorStop(0.45, color);
+    grad.addColorStop(1, shade(color, -0.12));
+  } else if (iceMode) {
     grad.addColorStop(0, ICE_PALETTE.iceWhite);
     grad.addColorStop(0.4, color);
     grad.addColorStop(1, shade(color, -0.1));
@@ -609,7 +839,7 @@ function drawPremiumSilhouette(
   ctx.fillRect(-2000, minY, 4000, sheenH);
   ctx.restore();
 
-  if (!iceMode) {
+  if (!iceMode && !jellyMode) {
     // Default mode: dark outer rim for definition.
     ctx.lineWidth = 1.5;
     ctx.lineJoin = 'round';
@@ -619,6 +849,66 @@ function drawPremiumSilhouette(
     traceRoundedOutline(ctx, outline, radius);
     ctx.stroke();
     ctx.globalAlpha = 1;
+  }
+
+  // Jelly mode: a soft cream rim (no hard line), a glossy highlight blob in
+  // the upper-left, and a scatter of suspended candy bubbles — gives the
+  // piece its wet, translucent gelatin identity.
+  if (jellyMode) {
+    let xMin = Infinity;
+    let xMax = -Infinity;
+    for (const p of outline) {
+      if (p.x < xMin) xMin = p.x;
+      if (p.x > xMax) xMax = p.x;
+    }
+
+    ctx.save();
+    traceRoundedOutline(ctx, outline, radius);
+    ctx.clip();
+
+    // Glossy highlight blob — a soft white oval near the top-left corner.
+    const hlx = xMin + (xMax - xMin) * 0.32;
+    const hly = minY + (maxY - minY) * 0.26;
+    const hl = ctx.createRadialGradient(hlx, hly, 0, hlx, hly, spec.unit * 0.7);
+    hl.addColorStop(0, 'rgba(255,255,255,0.75)');
+    hl.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = hl;
+    ctx.beginPath();
+    ctx.ellipse(hlx, hly, spec.unit * 0.55, spec.unit * 0.32, -0.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // Suspended bubbles inside the jelly — deterministic per shape.
+    const innerW = xMax - xMin;
+    const innerH = maxY - minY;
+    const shapeSeed = spec.shape.charCodeAt(0);
+    const bubbles = Math.max(3, Math.round((innerW * innerH) / 1400));
+    for (let i = 0; i < bubbles; i++) {
+      const seed = (shapeSeed + i * 71) * 9301 + 49297;
+      const bx = xMin + (((seed * 67) % 1000) / 1000) * innerW;
+      const by = minY + (((seed * 113) % 1000) / 1000) * innerH;
+      const br = 1.4 + ((seed * 7) % 100) / 45;
+      ctx.fillStyle = 'rgba(255, 248, 241, 0.5)';
+      ctx.beginPath();
+      ctx.arc(bx, by, br, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = 'rgba(255,255,255,0.8)';
+      ctx.beginPath();
+      ctx.arc(bx - br * 0.3, by - br * 0.3, Math.max(0.5, br * 0.3), 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.restore();
+
+    // Soft cream rim, slightly inset, low alpha — definition without a hard edge.
+    if (!ghost) {
+      ctx.save();
+      ctx.lineJoin = 'round';
+      ctx.lineCap = 'round';
+      ctx.strokeStyle = 'rgba(255, 248, 241, 0.7)';
+      ctx.lineWidth = 1.4;
+      traceRoundedOutline(ctx, outline, radius);
+      ctx.stroke();
+      ctx.restore();
+    }
   }
 
   // Ice mode: replace the hard rim with internal frost texture, faint
@@ -697,6 +987,10 @@ function iceTintFor(shape: BlockSpec['shape']): string {
   return ICE_SHAPE_PALETTE[shape] ?? '#a8d4ea';
 }
 
+function jellyTintFor(shape: BlockSpec['shape']): string {
+  return JELLY_SHAPE_PALETTE[shape] ?? '#FF7EB6';
+}
+
 /**
  * Translucent block at the pointer (the piece being dragged).
  */
@@ -707,10 +1001,17 @@ export function drawDragGhost(
   y: number,
   angle: number,
   iceMode = false,
+  jellyMode = false,
 ) {
-  const color = iceMode ? iceTintFor(spec.shape) : getShapeColor(spec.shape);
+  const color = jellyMode
+    ? jellyTintFor(spec.shape)
+    : iceMode
+      ? iceTintFor(spec.shape)
+      : getShapeColor(spec.shape);
   const outline = outlineFor(spec.shape, spec.unit);
-  const radius = Math.max(4, spec.unit * 0.22);
+  const radius = jellyMode
+    ? Math.max(8, spec.unit * 0.42)
+    : Math.max(4, spec.unit * 0.22);
 
   ctx.save();
   ctx.translate(x, y);
@@ -750,16 +1051,23 @@ export function drawLandingSilhouette(
   angle: number,
   cameraY: number,
   iceMode = false,
+  jellyMode = false,
 ) {
-  const color = iceMode ? iceTintFor(spec.shape) : getShapeColor(spec.shape);
+  const color = jellyMode
+    ? jellyTintFor(spec.shape)
+    : iceMode
+      ? iceTintFor(spec.shape)
+      : getShapeColor(spec.shape);
   const outline = outlineFor(spec.shape, spec.unit);
-  const radius = Math.max(4, spec.unit * 0.22);
+  const radius = jellyMode
+    ? Math.max(8, spec.unit * 0.42)
+    : Math.max(4, spec.unit * 0.22);
 
   ctx.save();
   ctx.translate(x, y - cameraY);
   ctx.rotate(angle);
 
-  ctx.globalAlpha = iceMode ? 0.32 : 0.22;
+  ctx.globalAlpha = jellyMode ? 0.3 : iceMode ? 0.32 : 0.22;
   ctx.fillStyle = color;
   traceRoundedOutline(ctx, outline, radius);
   ctx.fill();
@@ -767,7 +1075,7 @@ export function drawLandingSilhouette(
   ctx.globalAlpha = 0.95;
   ctx.lineWidth = 2;
   ctx.setLineDash([6, 5]);
-  ctx.strokeStyle = iceMode ? '#d6ecf7' : '#ffffff';
+  ctx.strokeStyle = jellyMode ? '#FFF8F1' : iceMode ? '#d6ecf7' : '#ffffff';
   traceRoundedOutline(ctx, outline, radius);
   ctx.stroke();
   ctx.setLineDash([]);

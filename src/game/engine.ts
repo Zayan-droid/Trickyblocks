@@ -37,6 +37,7 @@ import {
   drawHeightLine,
   drawIceBackdrop,
   drawInvalidIndicator,
+  drawJellyBackdrop,
   drawLandingSilhouette,
   drawPlatform,
 } from './renderer';
@@ -145,12 +146,14 @@ export class GameEngine {
   private lastWindBlast = 0;
   private disturbanceTimer = 0;
   private iceMode = false;
+  private jellyMode = false;
   private classicMode = false;
   private snowEmitTimer = 0;
   private iceGustTimer = 0;
   private iceGustDir = 1;
   private iceShakeAmp = 0;
   private iceFrostFlash = 0;
+  private jellyWiggleTimer = 0;
 
   constructor(cfg: EngineConfig) {
     this.cfg = cfg;
@@ -162,6 +165,7 @@ export class GameEngine {
     this.challenge = cfg.challenge ?? null;
     this.platformType = cfg.platform;
     this.iceMode = cfg.platform === 'ice';
+    this.jellyMode = cfg.platform === 'jelly';
     this.classicMode = cfg.mode === 'endless' && cfg.platform === 'wood';
     this.goalScore = cfg.goalScore ?? 0;
     this.goalHeight = cfg.goalHeight ?? 0;
@@ -752,9 +756,13 @@ export class GameEngine {
     // restitution, with friction left grippy so settled stacks hold.
     const spawnSpec = this.iceMode
       ? { ...spec, friction: 0.04, restitution: 0.05 }
-      : this.classicMode
-        ? { ...spec, density: spec.density * 1.6, restitution: 0.06 }
-        : spec;
+      : this.jellyMode
+        ? // Springy & grippy: the block compresses and bounces once on impact,
+          // then the high friction lets the stack settle without sliding.
+          { ...spec, friction: 0.6, restitution: 0.42 }
+        : this.classicMode
+          ? { ...spec, density: spec.density * 1.6, restitution: 0.06 }
+          : spec;
     const body = spawnBlock(this.world.world, {
       x: snappedX + off.x,
       y: landingY + off.y,
@@ -819,7 +827,7 @@ export class GameEngine {
     this.placementsTimes.push(ts - this.startTs);
     if (this.placementsTimes.length > 30) this.placementsTimes.shift();
 
-    playSfx('place');
+    playSfx(this.jellyMode ? 'boing' : 'place');
     vibrate(10);
     if (this.iceMode) {
       // Ice-mode placement burst: a frost shockwave ring at the contact line,
@@ -832,6 +840,15 @@ export class GameEngine {
       this.particles.emitFrostBreath(sx, sy, 14);
       this.particles.emitIceFlakes(sx, bottomY, 12);
       this.particles.emitSnowflakes(sx, sy, 8);
+    } else if (this.jellyMode) {
+      // Jelly-mode placement: a bubble-pop shockwave at the contact line and a
+      // spray of candy droplets + sugar sparkles at the block's centre.
+      const sx = body.position.x;
+      const sy = body.position.y - this.cameraY;
+      const bottomY = body.bounds.max.y - this.cameraY;
+      this.particles.emitBubblePop(sx, bottomY, 14);
+      this.particles.emitJellyDroplets(sx, sy, 10);
+      this.particles.emitCandySparkle(sx, sy, 8);
     } else {
       this.particles.emitImpact(
         body.position.x,
@@ -949,6 +966,12 @@ export class GameEngine {
         // spray of shards, scaling slightly with the combo length.
         this.particles.emitFrostRing(cbx, cby, 18);
         this.particles.emitIceFlakes(cbx, cby, Math.min(22, 12 + this.combo));
+      } else if (this.jellyMode) {
+        // Gummy explosion for a combo; a full rainbow jelly burst when the
+        // placement is also perfect.
+        playSfx('pop', 0.6);
+        if (isPerfect) this.particles.emitRainbowBurst(cbx, cby, 28);
+        else this.particles.emitGummyExplosion(cbx, cby, Math.min(28, 16 + this.combo));
       } else {
         this.particles.emitBurst(cbx, cby, meta.spec.color, 12);
       }
@@ -970,6 +993,8 @@ export class GameEngine {
         if (this.iceMode) {
           this.particles.emitAurora(lx, ly, 50);
           this.particles.emitSnowflakes(lx, ly, 24);
+        } else if (this.jellyMode) {
+          this.particles.emitCandyShower(lx, ly, 50);
         } else {
           this.particles.emitConfetti(lx, ly, 80);
         }
@@ -1175,6 +1200,31 @@ export class GameEngine {
   }
 
   /**
+   * Jelly-mode ambient motion. Nothing should feel rigid: every few seconds a
+   * tiny vertical "jiggle" impulse wakes the settled tower so it gently
+   * wobbles and resettles. Much gentler than the ice storm — there is no
+   * camera shake and no horizontal push that could topple a fair stack.
+   */
+  private tickJellyPhysics(dt: number) {
+    if (!this.jellyMode) return;
+    this.jellyWiggleTimer += dt;
+    const WIGGLE_INTERVAL = 3600;
+    if (this.jellyWiggleTimer < WIGGLE_INTERVAL) return;
+    this.jellyWiggleTimer = 0;
+    for (const body of this.world.world.bodies) {
+      if (body.isStatic) continue;
+      if (!body.label.startsWith('block')) continue;
+      Matter.Sleeping.set(body, false);
+      // A faint upward nudge — the tower bobs and settles, propagating a
+      // little wobble up the stack via the springy restitution.
+      Matter.Body.applyForce(body, body.position, {
+        x: (Math.random() - 0.5) * 0.00002 * body.mass,
+        y: -0.00006 * body.mass,
+      });
+    }
+  }
+
+  /**
    * Apply the current ice-mode camera shake to a base cameraY value.
    * Returns a tweaked y so the render loop can centralise the shift.
    */
@@ -1309,6 +1359,17 @@ export class GameEngine {
                 );
               }
             }
+            // Jelly mode: a bubble pop at the contact line on each notable
+            // impact, throttled the same way so stacked collisions don't flood.
+            if (this.jellyMode && sinceLast > 200) {
+              const intensity = Math.min(1, (vy - 1.6) / 6);
+              const px = cand.position.x;
+              const py = cand.bounds.max.y - this.cameraY;
+              this.particles.emitBubblePop(px, py, 8 + Math.round(intensity * 8));
+              if (intensity > 0.45) {
+                this.particles.emitJellyDroplets(px, py - 4, 4 + Math.round(intensity * 5));
+              }
+            }
           }
         }
       }
@@ -1364,6 +1425,11 @@ export class GameEngine {
       // (the palette's only red, reserved for collapses).
       this.particles.emitIceShatter(lcx, lcy, 40);
       this.particles.emitBurst(lcx, lcy, '#FF5C7A', 28);
+    } else if (this.jellyMode) {
+      // The jelly deflates: a soft wobble of droplets and bubble pops rather
+      // than a hard shatter.
+      this.particles.emitJellyDroplets(lcx, lcy, 30);
+      this.particles.emitBubblePop(lcx, lcy, 24);
     } else {
       this.particles.emitBurst(lcx, lcy, '#ff5252', 60);
     }
@@ -1381,6 +1447,9 @@ export class GameEngine {
       // Aurora particles with crystal snowflakes raining down through them.
       this.particles.emitAurora(wx, wy, 70);
       this.particles.emitSnowflakes(wx, wy - this.canvas.clientHeight / 12, 36);
+    } else if (this.jellyMode) {
+      // Candy shower — gummy bits flung upward through a haze of sugar.
+      this.particles.emitCandyShower(wx, wy, 80);
     } else {
       this.particles.emitConfetti(wx, wy, 120);
     }
@@ -1435,6 +1504,7 @@ export class GameEngine {
     this.checkForFallenBlocks();
     this.tickDisturbances(dt);
     this.tickIcePhysics(dt, ts);
+    this.tickJellyPhysics(dt);
 
     let topY = this.platformBaseY;
     for (const b of this.placedBlocks) {
@@ -1483,6 +1553,15 @@ export class GameEngine {
     this.ctx.save();
     if (this.iceMode) {
       drawIceBackdrop({
+        ctx: this.ctx,
+        width: w,
+        height: h,
+        cameraY: this.cameraY,
+        shake: 0,
+        reduceMotion: this.cfg.reduceMotion,
+      });
+    } else if (this.jellyMode) {
+      drawJellyBackdrop({
         ctx: this.ctx,
         width: w,
         height: h,
@@ -1563,7 +1642,7 @@ export class GameEngine {
       if (!body.label.startsWith('block')) continue;
       const meta = (body as Matter.Body & { _meta?: BodyMeta })._meta;
       if (!meta) continue;
-      drawBlock(this.ctx, body, meta.spec, renderCameraY, false, this.iceMode);
+      drawBlock(this.ctx, body, meta.spec, renderCameraY, false, this.iceMode, this.jellyMode);
     }
 
     // Drop preview: silhouette at snapped landing position + ghost at raw pointer
@@ -1578,6 +1657,7 @@ export class GameEngine {
           0,
           renderCameraY,
           this.iceMode,
+          this.jellyMode,
         );
         drawDragGhost(
           this.ctx,
@@ -1586,6 +1666,7 @@ export class GameEngine {
           drop.pointerY,
           0,
           this.iceMode,
+          this.jellyMode,
         );
       } else {
         drawInvalidIndicator(

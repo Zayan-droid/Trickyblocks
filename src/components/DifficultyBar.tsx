@@ -1,14 +1,17 @@
 interface Props {
   difficulty: number; // 1..5
   iceMode?: boolean;
+  jellyMode?: boolean;
 }
 
-export default function DifficultyBar({ difficulty, iceMode = false }: Props) {
+export default function DifficultyBar({ difficulty, iceMode = false, jellyMode = false }: Props) {
   const label =
     difficulty <= 2 ? 'Easy' : difficulty <= 3 ? 'Steady' : difficulty <= 4 ? 'Hard' : 'Brutal';
   const labelCls = iceMode
     ? 'text-[10px] tracking-widest uppercase whitespace-nowrap text-[#3A6A8F]'
-    : 'text-[10px] tracking-widest uppercase whitespace-nowrap text-white/70';
+    : jellyMode
+      ? 'text-[10px] tracking-widest uppercase whitespace-nowrap text-[#9A7FB5]'
+      : 'text-[10px] tracking-widest uppercase whitespace-nowrap text-white/70';
 
   return (
     <div className="flex flex-col items-center select-none pointer-events-none">
@@ -23,6 +26,8 @@ export default function DifficultyBar({ difficulty, iceMode = false }: Props) {
               >
                 {iceMode ? (
                   <Snowflake filled={filled} />
+                ) : jellyMode ? (
+                  <JellyDrop filled={filled} index={i} />
                 ) : (
                   <Star filled={filled} />
                 )}
@@ -47,6 +52,37 @@ function Star({ filled }: { filled: boolean }) {
         d="M12 2l2.9 6 6.6.9-4.8 4.6 1.2 6.6L12 17l-5.9 3.1 1.2-6.6L2.5 8.9 9.1 8z"
         fill={filled ? 'currentColor' : 'rgba(255,255,255,0.25)'}
       />
+    </svg>
+  );
+}
+
+function JellyDrop({ filled, index }: { filled: boolean; index: number }) {
+  // A rounded jelly droplet. Filled drops cycle through candy flavours and
+  // gently bounce (staggered per index); empty drops are a pale wash.
+  const flavors = ['#FF7EB6', '#FFC857', '#7DE2B8', '#77C7FF', '#B99BFF'];
+  const fill = filled ? flavors[index % flavors.length] : '#EAD9EC';
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      width="100%"
+      height="100%"
+      style={
+        filled
+          ? { animation: `jelly-breathe 1.8s ease-in-out ${index * 0.18}s infinite` }
+          : undefined
+      }
+    >
+      {/* Teardrop body */}
+      <path
+        d="M12 3 C12 3 19 11 19 15.5 A7 7 0 1 1 5 15.5 C5 11 12 3 12 3 Z"
+        fill={fill}
+        stroke={filled ? 'rgba(255,255,255,0.7)' : 'rgba(184,160,200,0.5)'}
+        strokeWidth={1}
+      />
+      {/* Glossy highlight */}
+      {filled && (
+        <ellipse cx="9.5" cy="13" rx="2" ry="3" fill="rgba(255,255,255,0.65)" />
+      )}
     </svg>
   );
 }

@@ -3,7 +3,12 @@ import type { BlockSpec } from '@/game/types';
 import { geomFor, svgPath } from '@/game/shapes';
 import { useSettingsStore } from '@/store/settingsStore';
 import { useGameStore } from '@/store/gameStore';
-import { ICE_PALETTE, ICE_SHAPE_PALETTE, SHAPE_PALETTES } from '@/game/themes';
+import {
+  ICE_PALETTE,
+  ICE_SHAPE_PALETTE,
+  JELLY_SHAPE_PALETTE,
+  SHAPE_PALETTES,
+} from '@/game/themes';
 
 interface Props {
   spec: BlockSpec;
@@ -13,6 +18,7 @@ interface Props {
 export default function BlockPreview({ spec, size = 64 }: Props) {
   const themeId = useSettingsStore((s) => s.theme);
   const iceMode = useGameStore((s) => s.platform === 'ice');
+  const jellyMode = useGameStore((s) => s.platform === 'jelly');
   const path = useMemo(
     () => svgPath(geomFor(spec.shape, spec.unit)),
     [spec.shape, spec.unit],
@@ -23,9 +29,11 @@ export default function BlockPreview({ spec, size = 64 }: Props) {
   const dispW = w * scale;
   const dispH = h * scale;
 
-  const color = iceMode
-    ? ICE_SHAPE_PALETTE[spec.shape]
-    : SHAPE_PALETTES[themeId][spec.shape];
+  const color = jellyMode
+    ? JELLY_SHAPE_PALETTE[spec.shape]
+    : iceMode
+      ? ICE_SHAPE_PALETTE[spec.shape]
+      : SHAPE_PALETTES[themeId][spec.shape];
   const fillId = `g-${spec.id}`;
   const sheenId = `s-${spec.id}`;
   const shadowId = `d-${spec.id}`;
@@ -69,6 +77,23 @@ export default function BlockPreview({ spec, size = 64 }: Props) {
     return { cracks, flakes };
   }, [iceMode, spec.shape, spec.unit, w, h]);
 
+  // Suspended candy bubbles for jelly mode — a few rounded blobs scattered
+  // deterministically inside the piece, mirroring the canvas renderer.
+  const jellyBubbles = useMemo(() => {
+    if (!jellyMode) return [] as Array<{ x: number; y: number; r: number }>;
+    const seedBase = spec.shape.charCodeAt(0);
+    const count = Math.max(3, Math.round((w * h) / 1400));
+    const out: Array<{ x: number; y: number; r: number }> = [];
+    for (let i = 0; i < count; i++) {
+      const seed = (seedBase + i * 71) * 9301 + 49297;
+      const x = -w / 2 + (((seed * 67) % 1000) / 1000) * w;
+      const y = -h / 2 + (((seed * 113) % 1000) / 1000) * h;
+      const r = 1.4 + ((seed * 7) % 100) / 45;
+      out.push({ x, y, r });
+    }
+    return out;
+  }, [jellyMode, spec.shape, w, h]);
+
   return (
     <div
       className="relative flex items-center justify-center"
@@ -81,9 +106,9 @@ export default function BlockPreview({ spec, size = 64 }: Props) {
       >
         <defs>
           <linearGradient id={fillId} x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0" stopColor={shade(color, 0.24)} />
+            <stop offset="0" stopColor={shade(color, jellyMode ? 0.42 : 0.24)} />
             <stop offset="0.45" stopColor={color} />
-            <stop offset="1" stopColor={shade(color, -0.2)} />
+            <stop offset="1" stopColor={shade(color, jellyMode ? -0.12 : -0.2)} />
           </linearGradient>
           <linearGradient id={sheenId} x1="0" x2="0" y1="0" y2="1">
             <stop offset="0" stopColor="rgba(255,255,255,0.40)" />
@@ -106,9 +131,9 @@ export default function BlockPreview({ spec, size = 64 }: Props) {
           <path
             d={path}
             fill={`url(#${fillId})`}
-            stroke={shade(color, -0.5)}
-            strokeOpacity="0.5"
-            strokeWidth={1.4}
+            stroke={jellyMode ? '#FFF8F1' : shade(color, -0.5)}
+            strokeOpacity={jellyMode ? 0.8 : 0.5}
+            strokeWidth={jellyMode ? 2 : 1.4}
             strokeLinejoin="round"
             fillRule="evenodd"
           />
@@ -151,6 +176,30 @@ export default function BlockPreview({ spec, size = 64 }: Props) {
                 style={{ filter: 'drop-shadow(0 0 4px rgba(247,253,255,0.7))' }}
               />
             </>
+          )}
+          {jellyMode && (
+            <g clipPath={`url(#${clipId})`}>
+              {/* Glossy highlight blob, upper-left. */}
+              <ellipse
+                cx={-w / 2 + w * 0.32}
+                cy={-h / 2 + h * 0.26}
+                rx={spec.unit * 0.5}
+                ry={spec.unit * 0.3}
+                fill="rgba(255,255,255,0.6)"
+                transform={`rotate(-28 ${-w / 2 + w * 0.32} ${-h / 2 + h * 0.26})`}
+              />
+              {jellyBubbles.map((b, idx) => (
+                <g key={`jb-${idx}`}>
+                  <circle cx={b.x} cy={b.y} r={b.r} fill="rgba(255,248,241,0.5)" />
+                  <circle
+                    cx={b.x - b.r * 0.3}
+                    cy={b.y - b.r * 0.3}
+                    r={Math.max(0.5, b.r * 0.3)}
+                    fill="rgba(255,255,255,0.85)"
+                  />
+                </g>
+              ))}
+            </g>
           )}
         </g>
       </svg>

@@ -191,3 +191,37 @@ export const ICE_SHAPE_PALETTE: Record<BlockShape, string> = {
   L: '#E8F3F9',
   J: '#BAD5E5',
 };
+
+/**
+ * "Jelly Mode" palette — soft, candy-like dessert colours. Everything reads
+ * as molded gelatin and gummy candy: bright translucent fruit flavours over
+ * a cream-white highlight, with desaturated berry/candy purples reserved for
+ * soft diffuse shadows (never harsh black). Shared between the canvas
+ * renderer, particles, and the React UI so the whole mode stays cohesive.
+ */
+export const JELLY_PALETTE = {
+  strawberry: '#FF7EB6',
+  peach: '#FFB68A',
+  mango: '#FFC857',
+  mint: '#7DE2B8',
+  blueRaspberry: '#77C7FF',
+  lavender: '#B99BFF',
+  candyShadow: '#6E5AA5', // soft candy purple shadow
+  berryShadow: '#755B8A', // soft berry shadow
+  cream: '#FFF8F1', // highlight / sheen
+} as const;
+
+/**
+ * Per-shape jelly flavour. Each tetromino gets its own candy colour so the
+ * tower reads as a stack of different gummy sweets. Gradient shading + the
+ * glossy highlight blob in the renderer give them their gelatin identity.
+ */
+export const JELLY_SHAPE_PALETTE: Record<BlockShape, string> = {
+  I: '#77C7FF', // blue raspberry
+  O: '#FFC857', // mango
+  T: '#B99BFF', // lavender
+  S: '#7DE2B8', // mint
+  Z: '#FF7EB6', // strawberry
+  L: '#FFB68A', // peach
+  J: '#C9A7FF', // grape jelly
+};

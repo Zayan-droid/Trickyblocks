@@ -18,11 +18,20 @@ export default function HUD({ height, onPause }: Props) {
   const goalHeight = useGameStore((s) => s.goalHeight);
 
   const iceMode = platform === 'ice';
-  const panelCls = iceMode ? 'ice-panel' : 'panel';
-  const dimText = iceMode ? 'text-[#3A6A8F]' : 'text-white/70';
-  const heightText = iceMode ? 'text-[#3A6A8F]' : 'text-white/70';
-  const strongText = iceMode ? 'text-[#233B63]' : '';
-  const accentCombo = iceMode ? 'text-[#5CB8E8]' : 'text-accent';
+  const jellyMode = platform === 'jelly';
+  const panelCls = iceMode ? 'ice-panel' : jellyMode ? 'jelly-panel' : 'panel';
+  const dimText = iceMode
+    ? 'text-[#3A6A8F]'
+    : jellyMode
+      ? 'text-[#9A7FB5]'
+      : 'text-white/70';
+  const heightText = dimText;
+  const strongText = iceMode ? 'text-[#233B63]' : jellyMode ? 'text-[#6E5AA5]' : '';
+  const accentCombo = iceMode
+    ? 'text-[#5CB8E8]'
+    : jellyMode
+      ? 'text-[#FF7EB6]'
+      : 'text-accent';
 
   const scoreFrac = goalScore > 0 ? Math.min(1, score / goalScore) : 0;
   const heightFrac = goalHeight > 0 ? Math.min(1, height / goalHeight) : 0;
@@ -45,7 +54,7 @@ export default function HUD({ height, onPause }: Props) {
         </div>
 
         <div className={`${panelCls} pointer-events-auto px-2 sm:px-3 py-1.5 sm:py-2 flex flex-col items-center gap-1 min-w-0`}>
-          <DifficultyBar difficulty={difficulty} iceMode={iceMode} />
+          <DifficultyBar difficulty={difficulty} iceMode={iceMode} jellyMode={jellyMode} />
           <div className={`text-[10px] tracking-widest uppercase whitespace-nowrap ${heightText}`}>
             {Math.round(height / 6)}m tall
           </div>
@@ -73,11 +82,13 @@ export default function HUD({ height, onPause }: Props) {
               label={`Score ${score}/${goalScore}`}
               frac={scoreFrac}
               iceMode={iceMode}
+              jellyMode={jellyMode}
             />
             <Bar
               label={`Height ${Math.round(height / 6)}/${Math.round(goalHeight / 6)}m`}
               frac={heightFrac}
               iceMode={iceMode}
+              jellyMode={jellyMode}
             />
           </div>
         </div>
@@ -90,21 +101,34 @@ function Bar({
   label,
   frac,
   iceMode,
+  jellyMode,
 }: {
   label: string;
   frac: number;
   iceMode?: boolean;
+  jellyMode?: boolean;
 }) {
-  const labelCls = iceMode ? 'text-[10px] text-[#3A6A8F]' : 'text-[10px] text-white/75';
+  const labelCls = iceMode
+    ? 'text-[10px] text-[#3A6A8F]'
+    : jellyMode
+      ? 'text-[10px] text-[#9A7FB5]'
+      : 'text-[10px] text-white/75';
   const trackCls = iceMode
     ? 'mt-1 h-1.5 rounded-full bg-[#D5E8F5] overflow-hidden'
-    : 'mt-1 h-1.5 rounded-full bg-surface-2 overflow-hidden';
-  const fillCls = iceMode
-    ? 'h-full transition-all duration-300'
-    : 'h-full bg-accent transition-all duration-300';
-  const fillStyle = iceMode
-    ? { width: `${Math.min(100, frac * 100)}%`, background: '#5CB8E8' }
-    : { width: `${Math.min(100, frac * 100)}%` };
+    : jellyMode
+      ? 'mt-1 h-1.5 rounded-full bg-[#F3D9E8] overflow-hidden'
+      : 'mt-1 h-1.5 rounded-full bg-surface-2 overflow-hidden';
+  const fillCls =
+    iceMode || jellyMode
+      ? 'h-full transition-all duration-300'
+      : 'h-full bg-accent transition-all duration-300';
+  const fillStyle =
+    iceMode || jellyMode
+      ? {
+          width: `${Math.min(100, frac * 100)}%`,
+          background: iceMode ? '#5CB8E8' : '#FF7EB6',
+        }
+      : { width: `${Math.min(100, frac * 100)}%` };
   return (
     <div>
       <div className={labelCls}>{label}</div>

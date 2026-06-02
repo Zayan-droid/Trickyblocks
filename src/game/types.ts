@@ -2,7 +2,7 @@ export type GameMode = 'endless' | 'daily' | 'challenge' | 'tutorial';
 
 export type BlockShape = 'I' | 'O' | 'T' | 'S' | 'Z' | 'L' | 'J';
 
-export type PlatformType = 'wood' | 'ice' | 'bouncy' | 'magnetic' | 'fragile';
+export type PlatformType = 'wood' | 'ice' | 'jelly' | 'bouncy' | 'magnetic' | 'fragile';
 
 export interface BlockSpec {
   id: string;

@@ -78,6 +78,10 @@ function platformProps(type: PlatformType) {
   switch (type) {
     case 'ice':
       return { friction: 0.02, restitution: 0.0 };
+    case 'jelly':
+      // Grippy so the stack doesn't slide, but springy so a landing block
+      // compresses and bounces once before settling — the gummy feel.
+      return { friction: 0.6, restitution: 0.45 };
     case 'bouncy':
       return { friction: 0.4, restitution: 0.85 };
     case 'magnetic':

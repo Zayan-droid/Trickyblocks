@@ -124,6 +124,44 @@ button {
     @apply ice-btn;
     background: linear-gradient(180deg, #F8FBFF 0%, #EAF6FF 100%);
   }
+  /* Jelly Mode — puffy molded-gelatin card. Pill-rounded, soft diffuse
+     candy shadow, a glossy top sheen, and a slow breathing wobble so it
+     never feels rigid. Children use candy-purple text. */
+  .jelly-panel {
+    position: relative;
+    border-radius: 28px;
+    background:
+      radial-gradient(120% 80% at 50% 0%, #FFFFFF 0%, rgba(255,255,255,0) 55%),
+      linear-gradient(180deg, #FFF8F1 0%, #FFE7F1 60%, #FFD9EA 100%);
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    box-shadow:
+      0 10px 22px rgba(110, 90, 165, 0.22),
+      inset 0 -4px 0 rgba(117, 91, 138, 0.12),
+      inset 0 3px 0 rgba(255, 255, 255, 0.85);
+    color: #6E5AA5;
+    animation: jelly-breathe 4.5s ease-in-out infinite;
+  }
+  .jelly-btn {
+    @apply relative inline-flex items-center justify-center gap-2 px-6 py-3 rounded-full font-semibold tracking-wide
+           transition-transform duration-150 active:scale-95 select-none cursor-pointer;
+    color: #5A3A6E;
+    border: 1px solid rgba(255, 255, 255, 0.7);
+    box-shadow:
+      0 6px 0 rgba(110, 90, 165, 0.35),
+      0 10px 18px rgba(110, 90, 165, 0.22),
+      inset 0 3px 0 rgba(255, 255, 255, 0.85);
+  }
+  .jelly-btn:hover { animation: jelly-jiggle 0.5s ease-in-out; }
+  .jelly-btn:active { animation: jelly-squish 0.22s ease-out; }
+  .jelly-btn-primary {
+    @apply jelly-btn;
+    color: #7A2E55;
+    background: linear-gradient(180deg, #FFB0D2 0%, #FF7EB6 100%);
+  }
+  .jelly-btn-ghost {
+    @apply jelly-btn;
+    background: linear-gradient(180deg, #FFFFFF 0%, #FFE7F1 100%);
+  }
   .accent-text {
     color: rgb(var(--accent));
     text-shadow:
@@ -136,3 +174,26 @@ button {
 
 /* Remove iOS double-tap zoom on game canvas */
 canvas { touch-action: none; }
+
+/* Jelly Mode motion. A gentle "breathing" scale for panels, a quick jiggle
+   on hover, and a squish (compress vertically, spread sideways, then settle)
+   on press — gives gummy UI its soft, alive feel. */
+@keyframes jelly-breathe {
+  0%, 100% { transform: scale(1, 1); }
+  50% { transform: scale(1.012, 0.988); }
+}
+@keyframes jelly-jiggle {
+  0%, 100% { transform: scale(1, 1); }
+  25% { transform: scale(1.05, 0.95); }
+  50% { transform: scale(0.97, 1.03); }
+  75% { transform: scale(1.02, 0.98); }
+}
+@keyframes jelly-squish {
+  0% { transform: scale(1, 1); }
+  40% { transform: scale(1.12, 0.82); }
+  100% { transform: scale(1, 1); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .jelly-panel { animation: none; }
+  .jelly-btn:hover, .jelly-btn:active { animation: none; }
+}

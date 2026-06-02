@@ -19,6 +19,7 @@ const BlockTray = forwardRef<HTMLDivElement, Props>(function BlockTray(
   const slotRef = useRef<HTMLDivElement>(null);
   const [slotPx, setSlotPx] = useState(64);
   const iceMode = useGameStore((s) => s.platform === 'ice');
+  const jellyMode = useGameStore((s) => s.platform === 'jelly');
 
   useEffect(() => {
     if (!dragging) return;
@@ -63,7 +64,11 @@ const BlockTray = forwardRef<HTMLDivElement, Props>(function BlockTray(
       <div className="mx-auto w-full max-w-md px-2 sm:px-3 pointer-events-auto">
         <div
           className={`px-2 sm:px-3 py-2 sm:py-3 flex items-end justify-center gap-1.5 sm:gap-3 ${
-            iceMode ? 'ice-panel' : 'panel border border-accent/30'
+            iceMode
+              ? 'ice-panel'
+              : jellyMode
+                ? 'jelly-panel'
+                : 'panel border border-accent/30'
           }`}
         >
           {slots.map((spec, i) => (
@@ -78,9 +83,13 @@ const BlockTray = forwardRef<HTMLDivElement, Props>(function BlockTray(
                     ? spec
                       ? 'bg-[#EAF6FF] ring-1 ring-[#BEE8FF] shadow-[inset_0_2px_4px_rgba(143,214,255,0.35)]'
                       : 'bg-[#F8FBFF]/60 border border-dashed border-[#BEE8FF]'
-                    : spec
-                      ? 'bg-surface-2 ring-1 ring-white/15'
-                      : 'bg-surface border border-dashed border-white/15'
+                    : jellyMode
+                      ? spec
+                        ? 'bg-[#FFEAF3] ring-1 ring-[#FFC2DC] shadow-[inset_0_2px_4px_rgba(255,176,210,0.4)]'
+                        : 'bg-[#FFF6FA]/70 border border-dashed border-[#FFC2DC]'
+                      : spec
+                        ? 'bg-surface-2 ring-1 ring-white/15'
+                        : 'bg-surface border border-dashed border-white/15'
                 }`}
               >
                 {spec && (
@@ -105,7 +114,15 @@ const BlockTray = forwardRef<HTMLDivElement, Props>(function BlockTray(
                 )}
               </div>
               <div className="h-3 mt-1 text-[9px] font-display tracking-wider uppercase leading-none text-center">
-                <span className={iceMode ? 'text-[#3A6A8F]' : 'text-white/40'}>
+                <span
+                  className={
+                    iceMode
+                      ? 'text-[#3A6A8F]'
+                      : jellyMode
+                        ? 'text-[#9A7FB5]'
+                        : 'text-white/40'
+                  }
+                >
                   {spec ? spec.shape : ''}
                 </span>
               </div>

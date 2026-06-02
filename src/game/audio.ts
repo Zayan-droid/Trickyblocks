@@ -11,7 +11,9 @@ type SfxKey =
   | 'powerup'
   | 'levelup'
   | 'gameover'
-  | 'milestone';
+  | 'milestone'
+  | 'boing'
+  | 'pop';
 
 /**
  * Procedurally synthesized audio using Web Audio API → encoded to data URI WAV → Howler.
@@ -151,6 +153,13 @@ const sfxBuilders: Record<SfxKey, () => Float32Array> = {
       synth({ duration: 0.45, startFreq: 660, endFreq: 990, type: 'square', attack: 0.01, decay: 0.4 }),
       synth({ duration: 0.45, startFreq: 880, endFreq: 1320, type: 'triangle', attack: 0.05, decay: 0.4 }),
     ),
+  // Jelly placement: a wobbly pitch-drop "boing" with heavy vibrato so it
+  // reads as something soft and springy landing.
+  boing: () =>
+    synth({ duration: 0.26, startFreq: 540, endFreq: 170, type: 'sine', attack: 0.004, decay: 0.22, vibrato: 0.09 }),
+  // Soft bubble pop — short, round, no hard edge.
+  pop: () =>
+    synth({ duration: 0.07, startFreq: 880, endFreq: 1500, type: 'sine', attack: 0.002, decay: 0.06 }),
 };
 
 const cache: Partial<Record<SfxKey, Howl>> = {};

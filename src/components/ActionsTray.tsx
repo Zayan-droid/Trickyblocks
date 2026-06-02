@@ -32,6 +32,7 @@ export default function ActionsTray({
   pinArmed,
 }: Props) {
   const iceMode = useGameStore((s) => s.platform === 'ice');
+  const jellyMode = useGameStore((s) => s.platform === 'jelly');
 
   const handle = (k: ActionDef['key']) => {
     if (k === 'undo') onUndo();
@@ -44,7 +45,9 @@ export default function ActionsTray({
 
   const headerCls = iceMode
     ? 'text-[9px] font-display tracking-[0.2em] text-[#233B63]/70 uppercase select-none'
-    : 'text-[9px] font-display tracking-[0.2em] text-accent/80 uppercase select-none';
+    : jellyMode
+      ? 'text-[9px] font-display tracking-[0.2em] text-[#6E5AA5]/70 uppercase select-none'
+      : 'text-[9px] font-display tracking-[0.2em] text-accent/80 uppercase select-none';
 
   return (
     <div className="absolute right-1 sm:right-2 top-1/2 -translate-y-1/2 z-20 flex flex-col items-end gap-1.5 sm:gap-2 pointer-events-auto pr-[max(env(safe-area-inset-right),0px)]">
@@ -64,11 +67,13 @@ export default function ActionsTray({
             aria-pressed={armed}
             title={armed ? `${label} · armed` : `${label} · ${remaining} left`}
             className={[
-              'relative w-12 h-12 sm:w-14 sm:h-14 rounded-2xl flex flex-col items-center justify-center',
+              'relative w-12 h-12 sm:w-14 sm:h-14 flex flex-col items-center justify-center',
               'transition-all duration-150 active:scale-95 select-none border',
               iceMode
                 ? iceButtonCls(disabled, armed)
-                : classicButtonCls(disabled, armed),
+                : jellyMode
+                  ? jellyButtonCls(disabled, armed)
+                  : classicButtonCls(disabled, armed),
             ].join(' ')}
           >
             <span className="text-lg sm:text-xl leading-none">{icon}</span>
@@ -81,9 +86,11 @@ export default function ActionsTray({
                 'rounded-full text-[10px] font-display leading-[18px] text-center',
                 iceMode
                   ? iceBadgeCls(disabled)
-                  : disabled
-                    ? 'bg-surface-2 text-white/50 border border-white/10'
-                    : 'bg-accent text-black',
+                  : jellyMode
+                    ? jellyBadgeCls(disabled)
+                    : disabled
+                      ? 'bg-surface-2 text-white/50 border border-white/10'
+                      : 'bg-accent text-black',
               ].join(' ')}
             >
               {remaining}
@@ -96,10 +103,23 @@ export default function ActionsTray({
 }
 
 function classicButtonCls(disabled: boolean, armed: boolean): string {
-  if (disabled) return 'bg-surface border-white/10 text-white/40 cursor-not-allowed shadow-[0_4px_0_rgba(0,0,0,0.45)]';
+  if (disabled) return 'rounded-2xl bg-surface border-white/10 text-white/40 cursor-not-allowed shadow-[0_4px_0_rgba(0,0,0,0.45)]';
   if (armed)
-    return 'bg-accent border-accent text-black ring-2 ring-accent animate-pulse shadow-[0_4px_0_rgba(0,0,0,0.45)]';
-  return 'bg-surface border-white/10 text-white hover:border-accent/60 shadow-[0_4px_0_rgba(0,0,0,0.45)]';
+    return 'rounded-2xl bg-accent border-accent text-black ring-2 ring-accent animate-pulse shadow-[0_4px_0_rgba(0,0,0,0.45)]';
+  return 'rounded-2xl bg-surface border-white/10 text-white hover:border-accent/60 shadow-[0_4px_0_rgba(0,0,0,0.45)]';
+}
+
+// Candy-capsule action buttons. Pill-rounded gummy buttons that jiggle on
+// hover and squish on press, with a soft candy-purple base shadow and a
+// cream-lit top edge. The pin's armed state uses mint jelly as its accent.
+function jellyButtonCls(disabled: boolean, armed: boolean): string {
+  const squish =
+    'hover:animate-[jelly-jiggle_0.5s_ease-in-out] active:animate-[jelly-squish_0.22s_ease-out]';
+  if (disabled)
+    return 'rounded-full bg-[#F3E3EC] border-white/50 text-[#C2A8C8] cursor-not-allowed shadow-[0_3px_0_rgba(110,90,165,0.2)]';
+  if (armed)
+    return `rounded-full bg-gradient-to-b from-[#B9F3D8] to-[#7DE2B8] border-white/70 text-[#1E6E4E] ring-2 ring-[#7DE2B8] animate-pulse shadow-[0_5px_0_rgba(110,90,165,0.35),inset_0_2px_0_rgba(255,255,255,0.7)] ${squish}`;
+  return `rounded-full bg-gradient-to-b from-[#FFD9EA] to-[#FF9EC7] border-white/70 text-[#7A2E55] shadow-[0_5px_0_rgba(110,90,165,0.35),inset_0_2px_0_rgba(255,255,255,0.85)] ${squish}`;
 }
 
 // Carved-ice action buttons. Idle blocks read as clean frozen ice with a
@@ -110,10 +130,10 @@ function iceButtonCls(disabled: boolean, armed: boolean): string {
   const carved =
     'shadow-[0_4px_0_rgba(92,184,232,0.5),0_8px_14px_rgba(35,59,99,0.18),inset_0_2px_0_rgba(255,255,255,0.85)]';
   if (disabled)
-    return `bg-[#EAF6FF] border-[#D5E8F5] text-[#9DB8CC] cursor-not-allowed shadow-[0_3px_0_rgba(143,214,255,0.3)]`;
+    return `rounded-2xl bg-[#EAF6FF] border-[#D5E8F5] text-[#9DB8CC] cursor-not-allowed shadow-[0_3px_0_rgba(143,214,255,0.3)]`;
   if (armed)
-    return `bg-gradient-to-b from-[#FFD4A8] to-[#FFB36A] border-[#FFB36A] text-[#5A3A1A] ring-2 ring-[#FFB36A] animate-pulse shadow-[0_4px_0_rgba(214,140,70,0.5),inset_0_2px_0_rgba(255,255,255,0.6)]`;
-  return `bg-gradient-to-b from-[#F8FBFF] to-[#BEE8FF] border-[#BEE8FF] text-[#233B63] hover:from-white hover:to-[#DDF8FF] hover:brightness-105 ${carved}`;
+    return `rounded-2xl bg-gradient-to-b from-[#FFD4A8] to-[#FFB36A] border-[#FFB36A] text-[#5A3A1A] ring-2 ring-[#FFB36A] animate-pulse shadow-[0_4px_0_rgba(214,140,70,0.5),inset_0_2px_0_rgba(255,255,255,0.6)]`;
+  return `rounded-2xl bg-gradient-to-b from-[#F8FBFF] to-[#BEE8FF] border-[#BEE8FF] text-[#233B63] hover:from-white hover:to-[#DDF8FF] hover:brightness-105 ${carved}`;
 }
 
 // Move-counter badge. The palette reserves Warm Orange for counters, warnings
@@ -122,4 +142,11 @@ function iceBadgeCls(disabled: boolean): string {
   return disabled
     ? 'bg-[#EAF6FF] text-[#9DB8CC] border border-[#D5E8F5]'
     : 'bg-[#FFB36A] text-[#5A3A1A] shadow-[0_1px_3px_rgba(214,140,70,0.5)]';
+}
+
+// Jelly move-counter badge — a mango-jelly bead, washed out when depleted.
+function jellyBadgeCls(disabled: boolean): string {
+  return disabled
+    ? 'bg-[#F3E3EC] text-[#C2A8C8] border border-white/50'
+    : 'bg-[#FFC857] text-[#7A4A00] shadow-[0_1px_3px_rgba(110,90,165,0.3)]';
 }

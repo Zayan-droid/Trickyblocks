@@ -44,6 +44,14 @@ export default function EndlessSelect() {
             icon="❄"
             onClick={() => start('ice')}
           />
+          <ModeTile
+            title="Jelly Mode"
+            blurb="A squishy candy world. Bouncy gummy blocks wobble on a giant jelly cake."
+            tagline="Gummy · Bouncy"
+            gradient="linear-gradient(135deg, #ff9ec7 0%, #b99bff 100%)"
+            icon="🍮"
+            onClick={() => start('jelly')}
+          />
         </div>
 
         <button onClick={() => nav(-1)} className="btn-ghost mt-4 self-start">
